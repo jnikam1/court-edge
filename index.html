@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Court Edge</title>
+<style>
+  /* One phone-width column. List of matches, tap one for the full read. */
+  :root {
+    --bg: #f3f5f8; --panel: #ffffff; --line: #d9dfe8; --fg: #16202e; --muted: #5d6b7e;
+    --accent: #2456b8; --good: #0f7a4d; --good-bg: #e3f4ec; --warn: #9a6200; --warn-bg: #fdf1d8;
+    --idle-bg: #e9edf3; --pa: #2456b8; --pb: #b4530a; --bad: #b3261e;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1520; --panel: #18212f; --line: #2a3648; --fg: #e8edf5; --muted: #93a1b5;
+      --accent: #7fa8ff; --good: #5fd3a0; --good-bg: #123526; --warn: #f0b95a; --warn-bg: #3a2c10;
+      --idle-bg: #222d3d; --pa: #7fa8ff; --pb: #f0a35a; --bad: #ff8a80; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans);
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  main { max-width: 620px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+  .status { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .status b { color: var(--fg); font-weight: 600; }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  a.card { color: inherit; text-decoration: none; }
+  a.card:active { border-color: var(--accent); }
+  .card.bet { border-color: var(--good); box-shadow: inset 4px 0 0 var(--good); }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .tour { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--idle-bg); color: var(--muted); white-space: nowrap; }
+  .chip.window { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+  .chip.live { background: var(--good-bg); color: var(--good); font-weight: 600; }
+  .players { display: grid; grid-template-columns: 1fr auto auto auto; column-gap: 12px; row-gap: 2px; align-items: baseline; }
+  .players .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+  .players .name small { font-weight: 400; color: var(--muted); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .sets { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0.25em; text-align: right; white-space: nowrap; }
+  .colhead { font-size: 11px; color: var(--muted); text-align: right; text-transform: uppercase; letter-spacing: 0.05em; }
+  .verdict { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--idle-bg); }
+  .verdict b.t { display: block; font-size: 16px; }
+  .verdict.bet { background: var(--good-bg); color: var(--good); }
+  .verdict.lean, .verdict.watch { background: var(--warn-bg); color: var(--warn); }
+  .verdict ul { margin: 6px 0 0; padding-left: 18px; color: var(--fg); font-size: 13.5px; }
+  .verdict li + li { margin-top: 3px; }
+  .verdict .why { display: block; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .empty { color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+  .notes { color: var(--muted); font-size: 13px; }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes li + li { margin-top: 4px; }
+  .err { color: var(--warn); }
+  .back { background: none; border: 0; padding: 6px 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+  .kv { display: grid; grid-template-columns: 1fr auto auto; column-gap: 14px; row-gap: 4px; align-items: baseline; font-size: 14px; }
+  .kv .k { color: var(--muted); min-width: 0; }
+  .kv .h { font-size: 12px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+  .small { font-size: 13px; color: var(--muted); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+  .seg button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .big2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .big2 > div { background: var(--idle-bg); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .big2 .v { font: 600 22px/1.2 var(--mono); }
+  .big2 .l { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .split { display: flex; flex-direction: column; gap: 3px; }
+  .split .lab { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .split .lab span:first-child { color: var(--muted); }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--idle-bg); gap: 2px; }
+  .bar i { display: block; height: 100%; }
+  .bar .a { background: var(--pa); } .bar .b { background: var(--pb); }
+  .split .amt { display: flex; justify-content: space-between; font: 12.5px var(--mono); }
+  .ca { color: var(--pa); font-weight: 600; } .cb { color: var(--pb); font-weight: 600; }
+  .legend { display: flex; gap: 14px; font-size: 13px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+  .rows { display: flex; flex-direction: column; }
+  .rows > div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .rows > div:first-child { border-top: 0; }
+  .rows .r { text-align: right; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; }
+  .rows .l { min-width: 0; overflow-wrap: anywhere; }
+  .wl { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .wl i { width: 16px; height: 16px; border-radius: 3px; font: 600 10px/16px var(--sans); text-align: center; font-style: normal; color: #fff; }
+  .wl .w { background: var(--good); } .wl .x { background: var(--bad); }
+  @media (prefers-color-scheme: dark) { .wl i { color: #0f1520; } }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .ai { white-space: pre-wrap; font-size: 14px; }
+  button.go { font: inherit; font-weight: 600; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent); cursor: pointer; }
+  button.go:disabled { opacity: 0.6; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main id="listView">
+  <header>
+    <h1>Court Edge</h1>
+    <div class="status" id="status">Loading Kalshi prices…</div>
+  </header>
+  <section><h2>Set-break gaps</h2><div class="list" id="bets"></div></section>
+  <section><h2>In play</h2><div class="list" id="live"></div></section>
+  <section><h2>Upcoming</h2><div class="list" id="upcoming"></div></section>
+  <section class="notes">
+    <h2>How to read this</h2>
+    <ul>
+      <li>Tap a match for the live read: score, fair value, price path, money flow, Polymarket wallets, form and ratings.</li>
+      <li>A set-break gap shows in the first minutes after a first set ends. Tested on 2,289 Kalshi matches, that price was fair on average, so treat a gap as a lean, not a sure thing.</li>
+      <li>Nothing on the match page is a proven edge. It is context for your own call, not advice.</li>
+    </ul>
+  </section>
+</main>
+
+<main id="detailView" hidden>
+  <header>
+    <button class="back" id="back">‹ All matches</button>
+    <div class="status" id="dStatus">Loading…</div>
+  </header>
+  <section><div class="card" id="dHead"></div></section>
+  <section><h2>Read</h2><div id="dRead"></div></section>
+  <section><h2>Fair value</h2><div class="card" id="dModel"></div></section>
+  <section><h2>Momentum</h2><div class="card" id="dChart"></div></section>
+  <section><h2>Money on Kalshi</h2><div class="card" id="dFlow"></div></section>
+  <section><h2>Polymarket wallets</h2><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></section>
+  <section><h2>Form</h2><div class="card" id="dForm"><span class="small">Loading results…</span></div></section>
+  <section><h2>Ratings and serve</h2><div class="card" id="dStats"></div></section>
+  <section><h2>Written analysis</h2><div class="card" id="dAi"></div></section>
+</main>
+
+<script>
+(function () {
+  var LIST_MS = 15000, DETAIL_MS = 10000, WHALE_MS = 120000;
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = text; return e; };
+  var add = function (p) { for (var i = 1; i < arguments.length; i++) if (arguments[i]) p.appendChild(arguments[i]); return p; };
+  var has = function (x) { return x !== null && x !== undefined; };
+  var cents = function (x) { return has(x) ? Math.round(x * 100) + '¢' : '–'; };
+  var c1 = function (x) { return (x * 100).toFixed(1) + '¢'; };
+  var pct = function (x) { return has(x) ? (x * 100).toFixed(1) + '%' : '–'; };
+  var last = function (n) { var p = String(n || '').trim().split(' '); return p[p.length - 1] || n; };
+  var mins = function (s) { return !has(s) ? '' : s < 90 ? s + 's ago' : Math.round(s / 60) + ' min ago'; };
+  var usd = function (x) { return !has(x) ? '–' : Math.abs(x) >= 1e6 ? '$' + (x / 1e6).toFixed(1) + 'M' : Math.abs(x) >= 1000 ? '$' + (x / 1000).toFixed(Math.abs(x) >= 1e4 ? 0 : 1) + 'k' : '$' + Math.round(x); };
+  var signed = function (x) { return (x < 0 ? '−' : '+') + usd(Math.abs(x)); };
+  var clock = function (t) { return new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+  var day = function (t) { return new Date(t * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }); };
+  var get = function (url) { return fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); };
+
+  // ---------- list ----------
+  function stateText(m) {
+    var w1 = m.set1 && m.set1.winner ? last(m[m.set1.winner].name) : null;
+    if (m.state === 'set2') return (m.inWindow ? 'Set break · ' : 'Set 2 · ') + 'set 1 to ' + w1 + (has(m.since) ? ' · ' + mins(m.since) : '');
+    if (m.state === 'decider') return 'Deciding set';
+    if (m.state === 'closing') return 'Finished · settling';
+    if (m.state === 'set1') return 'Set 1 in play';
+    if (m.pm && m.pm.start) return 'Starts ' + day(Date.parse(m.pm.start) / 1000) + ' ' + clock(Date.parse(m.pm.start) / 1000);
+    return 'Not started';
+  }
+  function setsText(sets, k) { return sets ? sets.map(function (s) { return s[k]; }).join('') : ''; }
+  function playersGrid(m, sets) {
+    var g = el('div', 'players');
+    add(g, el('span', 'colhead', ''), el('span', 'colhead', sets ? 'Sets' : ''), el('span', 'colhead', 'Bid'), el('span', 'colhead', 'Ask'));
+    ['a', 'b'].forEach(function (k, i) {
+      var p = m[k]; var name = el('span', 'name', p.name);
+      if (m.set1 && m.set1.winner === k && !sets) add(name, document.createTextNode(' '), el('small', '', 'won set 1'));
+      add(g, name, el('span', 'sets', sets ? setsText(sets, i) : ''), el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
+    });
+    return g;
+  }
+  function listVerdict(m) {
+    if (!m.call || !m.fair) return null;
+    var side = m[m.call.side]; var fair = m.fair[m.call.side]; var v = el('div', 'verdict');
+    if (m.call.live && m.call.bet) { v.className = 'verdict bet'; add(v, el('b', 't', 'Gap: ' + side.name + ' at ' + cents(m.call.price))); add(v, el('span', 'why', 'Fair ' + cents(fair) + '. Gap ' + c1(m.call.edge) + ' after fees, needs ' + c1(m.call.need) + '.')); return v; }
+    if (m.call.live) { v.textContent = 'No gap at the break. Closest: ' + last(side.name) + ' ' + cents(m.call.price) + ', fair ' + cents(fair) + '.'; return v; }
+    return null;
+  }
+  function card(m) {
+    var isBet = m.call && m.call.live && m.call.bet;
+    var c = el('a', 'card' + (isBet ? ' bet' : '')); c.href = '#m=' + encodeURIComponent(m.event);
+    var top = el('div', 'top');
+    add(top, el('span', 'tour', (m.tournament || m.tourLabel || m.tour)), el('span', 'chip' + (m.inWindow ? ' window' : m.state !== 'upcoming' ? ' live' : ''), stateText(m)));
+    add(c, top, playersGrid(m, m.pm && m.pm.live ? m.pm.sets : null), listVerdict(m));
+    return c;
+  }
+  function fill(id, items, emptyText) {
+    var box = $(id); box.replaceChildren();
+    if (!items.length) { box.appendChild(el('div', 'empty', emptyText)); return; }
+    items.forEach(function (m) { box.appendChild(card(m)); });
+  }
+  function renderList(d) {
+    var ms = d.matches || [];
+    var bets = ms.filter(function (m) { return m.call && m.call.live && m.call.bet; });
+    var live = ms.filter(function (m) { return m.state !== 'upcoming' && bets.indexOf(m) < 0; });
+    var up = ms.filter(function (m) { return m.state === 'upcoming'; });
+    fill('bets', bets, 'None right now. A match shows here when a first set ends and the price is off its usual level.');
+    fill('live', live, 'No matches in play.');
+    fill('upcoming', up, 'No upcoming matches listed.');
+    var s = $('status'); s.replaceChildren();
+    add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · ' + ms.length + ' matches · refreshes every 15s'));
+  }
+  function loadList() {
+    get('/api/scan').then(renderList).catch(function (e) { $('status').replaceChildren(el('span', 'err', 'Could not reach Kalshi just now (' + e.message + '). Retrying.')); });
+  }
+
+  // ---------- detail ----------
+  var cur = { event: null, srv: null, d: null, timers: [], aiText: null };
+
+  function head(d) {
+    var box = $('dHead'); box.replaceChildren();
+    var top = el('div', 'top');
+    var sc = d.score; var st = { event: d.event, a: d.a, b: d.b, state: d.state, since: d.since, inWindow: d.inWindow, set1: d.set1, pm: sc };
+    add(top, el('span', 'tour', [d.tournament || d.tour, d.surface].filter(Boolean).join(' · ')), el('span', 'chip' + (d.inWindow ? ' window' : d.state !== 'upcoming' ? ' live' : ''), stateText(st)));
+    add(box, top, playersGrid(d, sc && (sc.live || sc.ended) ? sc.sets : null));
+    var bits = [];
+    if (has(d.pre)) bits.push('Pre-match ' + last(d.a.name) + ' ' + cents(d.pre) + ' / ' + last(d.b.name) + ' ' + cents(1 - d.pre));
+    bits.push('Kalshi volume ' + usd(d.volume).replace('$', '') + ' contracts');
+    if (d.polymarket && d.polymarket.price) bits.push('Polymarket ' + cents(d.polymarket.price[0]) + ' / ' + cents(d.polymarket.price[1]));
+    if (!sc) bits.push('No live score feed for this match');
+    add(box, el('div', 'small', bits.join(' · ')));
+  }
+
+  function read(d) {
+    var r = d.read; var v = el('div', 'verdict ' + r.level);
+    add(v, el('b', 't', r.title));
+    if (r.why && r.why.length) { var ul = el('ul'); r.why.forEach(function (w) { ul.appendChild(el('li', '', w)); }); v.appendChild(ul); }
+    $('dRead').replaceChildren(v);
+  }
+
+  function modelBox(d) {
+    var box = $('dModel'); box.replaceChildren(); var m = d.model;
+    var A = last(d.a.name), B = last(d.b.name);
+    if (m.live) {
+      var g = el('div', 'big2');
+      [['a', m.live.a], ['b', 1 - m.live.a]].forEach(function (x) {
+        var ask = d[x[0]].ask; var cell = el('div');
+        add(cell, el('div', 'v ' + (x[0] === 'a' ? 'ca' : 'cb'), cents(x[1])), el('div', 'l', (x[0] === 'a' ? A : B) + ' fair · ask ' + cents(ask) + (has(ask) ? ' · gap ' + ((x[1] - ask) * 100 >= 0 ? '+' : '−') + Math.abs((x[1] - ask) * 100).toFixed(1) + '¢' : '')));
+        g.appendChild(cell);
+      });
+      add(box, g, el('div', 'small', 'From the live score with a point-by-point model. Starting point: ' + m.live.basis + '. Gap is before fees. Mid-set numbers tend to run about 3¢ high for the player ahead.'));
+      var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Who is serving');
+      [[null, 'Server unknown'], ['a', A + ' serving'], ['b', B + ' serving']].forEach(function (o) {
+        var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(cur.srv === o[0]));
+        b.addEventListener('click', function () { cur.srv = o[0]; loadDetail(); }); seg.appendChild(b);
+      });
+      box.appendChild(seg);
+    } else {
+      add(box, el('div', 'small', d.state === 'upcoming' ? 'The live fair value starts when the match does.' : d.score ? 'No live fair value for this state.' : 'No live score for this match, so no point-by-point fair value.'));
+    }
+    var kv = el('div', 'kv');
+    add(kv, el('span', 'k', ''), el('span', 'h', A), el('span', 'h', B));
+    var row = function (k, a, b) { add(kv, el('span', 'k', k), el('span', 'num', a), el('span', 'num', b)); };
+    if (m.rule) row('After set 1 (Kalshi history, n=' + m.rule.n + ')', cents(m.rule.a), cents(m.rule.b));
+    if (has(m.rating)) row('Ratings only, pre-match (to ' + m.through + ')', cents(m.rating), cents(1 - m.rating));
+    if (has(d.pre)) row('Kalshi pre-match price', cents(d.pre), cents(1 - d.pre));
+    if (kv.children.length > 3) box.appendChild(kv);
+  }
+
+  function chart(d) {
+    var box = $('dChart'); box.replaceChildren();
+    var pts = d.chart || [];
+    var favA = !has(d.pre) || d.pre >= 0.5; var who = favA ? d.a : d.b;
+    var f = function (v) { return favA ? v : 1 - v; };
+    var mv = function (x) { return !has(x) ? '–' : (f(x) - (favA ? 0 : 1) >= 0 ? '+' : '−') + Math.abs(Math.round(x * 100)) + '¢'; };
+    var g = el('div', 'kv'); g.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    [['5 min', d.move.m5], ['15 min', d.move.m15], ['60 min', d.move.m60]].forEach(function (x) {
+      var cell = el('div'); add(cell, el('div', 'num', mv(x[1])), el('div', 'small', 'last ' + x[0])); cell.firstChild.style.textAlign = 'left'; cell.firstChild.style.fontSize = '18px'; cell.firstChild.style.fontWeight = '600'; g.appendChild(cell);
+    });
+    add(box, el('div', 'small', last(who.name) + ' price on Kalshi'), g);
+    if (pts.length < 3) { add(box, el('div', 'small', 'Not enough price history yet.')); return; }
+    var W = 600, H = 190, L = 34, R = 44, T = 10, Bm = 22;
+    var ys = pts.map(function (p) { return f(p[1]); });
+    var lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+    if (has(d.pre)) { lo = Math.min(lo, f(d.pre)); hi = Math.max(hi, f(d.pre)); }
+    lo = Math.max(0, Math.floor(lo * 20) / 20 - 0.0001); hi = Math.min(1, Math.ceil(hi * 20) / 20 + 0.0001); if (hi - lo < 0.1) { hi = Math.min(1, hi + 0.05); lo = Math.max(0, lo - 0.05); }
+    var t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+    var X = function (t) { return L + (W - L - R) * (t - t0) / Math.max(1, t1 - t0); };
+    var Y = function (v) { return T + (H - T - Bm) * (1 - (v - lo) / (hi - lo)); };
+    var NS = 'http://www.w3.org/2000/svg';
+    var s = function (tag, at, text) { var e = document.createElementNS(NS, tag); for (var k in at) e.setAttribute(k, at[k]); if (text) e.textContent = text; return e; };
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': last(who.name) + ' price over the last ' + Math.round((t1 - t0) / 60) + ' minutes, now ' + cents(ys[ys.length - 1]) });
+    [lo, (lo + hi) / 2, hi].forEach(function (v) {
+      svg.appendChild(s('line', { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: 'var(--line)', 'stroke-width': 1 }));
+      svg.appendChild(s('text', { x: L - 6, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--muted)' }, Math.round(v * 100) + '¢'));
+    });
+    if (has(d.pre)) {
+      svg.appendChild(s('line', { x1: L, x2: W - R, y1: Y(f(d.pre)), y2: Y(f(d.pre)), stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '4 4' }));
+    }
+    var marks = [];
+    if (d.score && d.score.start) marks.push([Date.parse(d.score.start) / 1000, 'start']);
+    if (d.set1 && d.set1.ended) marks.push([d.set1.ended, 'set 1 over']);
+    marks.forEach(function (mk) {
+      if (mk[0] <= t0 || mk[0] >= t1) return;
+      svg.appendChild(s('line', { x1: X(mk[0]), x2: X(mk[0]), y1: T, y2: H - Bm, stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
+      svg.appendChild(s('text', { x: X(mk[0]), y: H - 6, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--muted)' }, mk[1]));
+    });
+    svg.appendChild(s('polyline', { points: pts.map(function (p) { return X(p[0]).toFixed(1) + ',' + Y(f(p[1])).toFixed(1); }).join(' '), fill: 'none', stroke: favA ? 'var(--pa)' : 'var(--pb)', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    var ly = Y(ys[ys.length - 1]);
+    svg.appendChild(s('circle', { cx: X(t1), cy: ly, r: 4, fill: favA ? 'var(--pa)' : 'var(--pb)' }));
+    svg.appendChild(s('text', { x: X(t1) + 8, y: ly + 5, 'font-size': 14, 'font-weight': 600, fill: 'var(--fg)' }, cents(ys[ys.length - 1])));
+    svg.appendChild(s('text', { x: L, y: H - 6, 'font-size': 11, fill: 'var(--muted)' }, clock(t0)));
+    svg.appendChild(s('text', { x: W - R, y: H - 6, 'text-anchor': 'end', 'font-size': 11, fill: 'var(--muted)' }, clock(t1)));
+    box.appendChild(svg);
+    if (has(d.pre)) box.appendChild(el('div', 'small', 'Dashed line: pre-match price ' + cents(f(d.pre)) + '.'));
+  }
+
+  function legend(d) {
+    var l = el('div', 'legend');
+    [['a', d.a.name], ['b', d.b.name]].forEach(function (x) { var s = el('span'); var i = el('i'); i.style.background = 'var(--p' + x[0] + ')'; add(s, i, document.createTextNode(x[1])); l.appendChild(s); });
+    return l;
+  }
+  function split(label, a, b, extraA, extraB) {
+    var w = el('div', 'split'); var tot = a + b;
+    var lab = el('div', 'lab'); add(lab, el('span', '', label), el('span', '', tot > 0 ? Math.round(100 * Math.max(a, b) / tot) + '% ' + (a >= b ? 'left' : 'right') : 'none'));
+    var bar = el('div', 'bar'); var ia = el('i', 'a'); var ib = el('i', 'b');
+    ia.style.width = (tot > 0 ? 100 * a / tot : 0) + '%'; ib.style.width = (tot > 0 ? 100 * b / tot : 0) + '%'; add(bar, ia, ib);
+    var amt = el('div', 'amt'); add(amt, el('span', 'ca', usd(a) + (extraA || '')), el('span', 'cb', usd(b) + (extraB || '')));
+    return add(w, lab, bar, amt);
+  }
+  function sideSplit(label, a, b, d, extraA, extraB) {
+    var w = split(label, a, b, extraA, extraB); var tot = a + b;
+    w.firstChild.lastChild.textContent = tot > 0 ? Math.round(100 * Math.max(a, b) / tot) + '% ' + last(a >= b ? d.a.name : d.b.name) : 'none';
+    return w;
+  }
+
+  function flow(d) {
+    var box = $('dFlow'); box.replaceChildren(); var f = d.flow;
+    if (!f || !f.trades) { box.appendChild(el('div', 'small', 'No trades yet.')); return; }
+    add(box, legend(d), sideSplit('Taker buys, last 5 min', f.m5.a, f.m5.b, d), sideSplit('Last 15 min', f.m15.a, f.m15.b, d));
+    if (f.m60.covered) box.appendChild(sideSplit('Last 60 min', f.m60.a, f.m60.b, d));
+    else if (f.since) box.appendChild(sideSplit('Since ' + clock(f.since) + ' (last ' + f.trades + ' trades)', f.all.a, f.all.b, d));
+    if (f.big && f.big.length) {
+      add(box, el('div', 'small', 'Biggest recent single trades ($2k+)'));
+      var rows = el('div', 'rows');
+      f.big.forEach(function (t) { var r = el('div'); add(r, add(el('span', 'l'), el('span', t.side === 'a' ? 'ca' : 'cb', last(d[t.side].name)), document.createTextNode(' at ' + cents(t.price))), el('span', 'r', usd(t.usd) + ' · ' + clock(t.t))); rows.appendChild(r); });
+      box.appendChild(rows);
+    }
+    box.appendChild(el('div', 'small', 'Who is hitting the ask. It shows urgency, not who is right.'));
+  }
+
+  function whales(d, w) {
+    var box = $('dWhales'); box.replaceChildren();
+    if (!w || w.none) { box.appendChild(el('div', 'small', 'Polymarket does not list this match, so there is no wallet data.')); return; }
+    var g = w.groups; var n = function (x) { return ' · ' + x + 'w'; };
+    add(box, legend(d));
+    var rows = [['Wallets winning at tennis lately', g.winner], ['Wallets losing at tennis lately', g.loser], ['About break-even at tennis', g.flat], ['Little tennis history', g.thin], ['Smaller wallets, not graded', g.rest]];
+    rows.forEach(function (r) { if (r[1][2] + r[1][3] > 0) box.appendChild(sideSplit(r[0], r[1][0], r[1][1], d, n(r[1][2]), n(r[1][3]))); });
+    add(box, el('div', 'small', 'Largest net positions and each wallet\'s recent tennis record'));
+    var t = el('div', 'rows');
+    (w.rows || []).forEach(function (p) {
+      var r = el('div'); var l = el('span', 'l');
+      add(l, el('span', p.side === 'a' ? 'ca' : 'cb', last(d[p.side].name)), document.createTextNode(' · ' + p.name + (p.hedged ? ' (both sides)' : '')));
+      var tn = p.tennis; var rec = !tn || !tn.matches ? 'No tennis in recent history' : 'Tennis ' + signed(tn.net) + ' over ' + tn.matches + ' matches, won ' + Math.round(100 * tn.won / tn.matches) + '%';
+      add(l, el('div', 'small', rec + (has(p.lifetime) ? ' · all markets ' + signed(p.lifetime) : '')));
+      add(r, l, el('span', 'r', usd(p.usd) + ' at ' + cents(p.avg))); t.appendChild(r);
+    });
+    box.appendChild(t);
+    box.appendChild(el('div', 'small', 'Each wallet is netted across both players. The ' + w.graded + ' biggest of ' + w.counted + ' wallets with $' + w.minStake + '+ are graded on tennis match bets in their last 2,000 closed positions, after fees and counting losing bets they never redeemed. Winning or losing means at least $2k either way over 15+ matches. Lifetime profit in other sports says nothing about tennis. Updated ' + new Date(w.asOf).toLocaleTimeString() + '.'));
+  }
+
+  function form(d, f) {
+    var box = $('dForm'); box.replaceChildren();
+    if (!f) { box.appendChild(el('div', 'small', 'No results found.')); return; }
+    ['a', 'b'].forEach(function (k) {
+      var p = f[k]; var hd = el('div', 'top');
+      var wl = el('span', 'wl'); p.results.slice().reverse().forEach(function (r) { wl.appendChild(el('i', r.won ? 'w' : 'x', r.won ? 'W' : 'L')); });
+      add(hd, el('b', k === 'a' ? 'ca' : 'cb', d[k].name), el('span', 'small', p.results.length ? p.w + '-' + p.l + ' last ' + p.results.length + ' · ' + p.streak : 'no recent matches on Kalshi'));
+      add(box, hd, p.results.length ? wl : null);
+      var rows = el('div', 'rows');
+      p.results.slice(0, 5).forEach(function (r) { var x = el('div'); add(x, el('span', 'l', (r.won ? 'Beat ' : 'Lost to ') + r.vs), el('span', 'r', (r.tournament || '').replace(/^(ATP|WTA) /, '').slice(0, 26) + ' · ' + day(r.t))); rows.appendChild(x); });
+      if (p.results.length) box.appendChild(rows);
+    });
+    var h = f.h2h || [];
+    box.appendChild(el('div', 'small', h.length ? 'Head to head in the last ' + f.days + ' days: ' + h.map(function (x) { return last(d[x.winner].name) + ' (' + day(x.t) + ')'; }).join(', ') + '.' : 'No meetings in the last ' + f.days + ' days. Results come from settled Kalshi markets, oldest on the left.'));
+  }
+
+  function stats(d) {
+    var box = $('dStats'); box.replaceChildren(); var a = d.stats.a, b = d.stats.b;
+    if (!a && !b) { box.appendChild(el('div', 'small', 'Neither player is in the ratings table.')); return; }
+    var kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', last(d.a.name)), el('span', 'h', last(d.b.name)));
+    var row = function (k, fa) { add(kv, el('span', 'k', k), el('span', 'num', a ? fa(a) : '–'), el('span', 'num', b ? fa(b) : '–')); };
+    row('Rating, all surfaces', function (p) { return String(p.elo); });
+    row('Rating on ' + d.surface, function (p) { return has(p.surf) ? p.surf + ' (' + p.surfN + ')' : '–'; });
+    row('Record, 12 months', function (p) { return p.w + '-' + p.l; });
+    row('Serve points won', function (p) { return pct(p.sv); });
+    row('Return points won', function (p) { return pct(p.rt); });
+    add(box, kv, el('div', 'small', 'Tour-level data to ' + d.model.through + '. Nothing newer is free, so treat these as background, not current form.' + (has(d.model.rating) ? ' Ratings alone make it ' + last(d.a.name) + ' ' + cents(d.model.rating) + '.' : '')));
+  }
+
+  function ai() {
+    var box = $('dAi'); box.replaceChildren();
+    if (cur.aiText) { add(box, el('div', 'ai', cur.aiText)); }
+    var b = el('button', 'go', cur.aiText ? 'Write it again' : 'Write analysis'); b.type = 'button';
+    b.addEventListener('click', function () {
+      b.disabled = true; b.textContent = 'Writing…'; var ev = cur.event;
+      get('/api/ai?event=' + encodeURIComponent(ev)).then(function (r) {
+        if (ev !== cur.event) return;
+        if (r.off) { box.replaceChildren(el('div', 'small', 'Off. Add ANTHROPIC_API_KEY to this project in Vercel to get a Claude write-up here. The read at the top works without it.')); return; }
+        cur.aiText = r.text || 'No text came back.'; ai();
+      }).catch(function (e) { if (ev !== cur.event) return; b.disabled = false; b.textContent = 'Try again'; box.appendChild(el('div', 'small err', e.message)); });
+    });
+    add(box, b, cur.aiText ? null : el('div', 'small', 'Claude reads everything on this page and writes a short verdict. Runs only when you tap.'));
+  }
+
+  function renderDetail(d) {
+    cur.d = d; head(d); read(d); modelBox(d); chart(d); flow(d); stats(d);
+    var s = $('dStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · refreshes every 10s'));
+    if (cur.whales !== undefined) whales(d, cur.whales);
+    if (cur.form !== undefined) form(d, cur.form);
+  }
+  function loadDetail() {
+    var ev = cur.event; if (!ev) return;
+    get('/api/match?event=' + encodeURIComponent(ev) + (cur.srv ? '&srv=' + cur.srv : '')).then(function (d) { if (ev === cur.event) renderDetail(d); })
+      .catch(function (e) { if (ev === cur.event) $('dStatus').replaceChildren(el('span', 'err', e.message + (cur.d ? ' Showing the last data.' : ''))); });
+  }
+  function loadWhales() {
+    var ev = cur.event; if (!ev) return;
+    get('/api/whales?event=' + encodeURIComponent(ev)).then(function (w) { if (ev !== cur.event) return; cur.whales = w; if (cur.d) whales(cur.d, w); })
+      .catch(function () { if (ev === cur.event && cur.whales === undefined) $('dWhales').replaceChildren(el('div', 'small err', 'Could not load Polymarket wallets. Will retry.')); });
+  }
+  function loadForm() {
+    var ev = cur.event; if (!ev) return;
+    get('/api/form?event=' + encodeURIComponent(ev)).then(function (f) { if (ev !== cur.event) return; cur.form = f; if (cur.d) form(cur.d, f); })
+      .catch(function () { if (ev === cur.event) $('dForm').replaceChildren(el('div', 'small err', 'Could not load results.')); });
+  }
+
+  function openDetail(ev) {
+    cur.timers.forEach(clearInterval);
+    cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
+    $('listView').hidden = true; $('detailView').hidden = false; window.scrollTo(0, 0);
+    ['dHead', 'dRead', 'dModel', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
+    $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…'));
+    $('dStatus').textContent = 'Loading…'; ai();
+    loadDetail(); loadWhales(); loadForm();
+    cur.timers.push(setInterval(function () { if (!document.hidden) loadDetail(); }, DETAIL_MS));
+    cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
+  }
+  function route() {
+    var m = /^#m=(.+)$/.exec(location.hash);
+    if (m) { openDetail(decodeURIComponent(m[1])); return; }
+    cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
+    $('detailView').hidden = true; $('listView').hidden = false; loadList();
+  }
+  $('back').addEventListener('click', function () { location.hash = ''; });
+  window.addEventListener('hashchange', route);
+  route();
+  setInterval(function () { if (!document.hidden && !cur.event) loadList(); }, LIST_MS);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else loadList(); });
+})();
+</script>
+</body>
+</html>
