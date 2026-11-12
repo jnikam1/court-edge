@@ -207,8 +207,9 @@
   <section><h2>Momentum</h2><div class="card" id="dChart"></div></section>
   <section><h2>Money on Kalshi</h2><div class="card" id="dFlow"></div></section>
   <section><h2>Polymarket wallets</h2><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></section>
-  <section><h2>Form</h2><div class="card" id="dForm"><span class="small">Loading results…</span></div></section>
-  <section><h2>Ratings and serve</h2><div class="card" id="dStats"></div></section>
+  <section><h2>Recent form</h2><div class="card" id="dForm"><span class="small">Loading results…</span></div></section>
+  <section><h2>Head to head</h2><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></section>
+  <section><h2>Player patterns and ratings</h2><div class="card" id="dStats"></div></section>
   <section><h2>Written analysis</h2><div class="card" id="dAi"></div></section>
 </main>
 
@@ -457,14 +458,21 @@
     ['a', 'b'].forEach(function (k) {
       var p = f[k]; var hd = el('div', 'top');
       var wl = el('span', 'wl'); p.results.slice().reverse().forEach(function (r) { wl.appendChild(el('i', r.won ? 'w' : 'x', r.won ? 'W' : 'L')); });
-      add(hd, el('b', k === 'a' ? 'ca' : 'cb', d[k].name), el('span', 'small', p.results.length ? p.w + '-' + p.l + ' last ' + p.results.length + ' · ' + p.streak : 'no recent matches on Kalshi'));
+      add(hd, el('b', k === 'a' ? 'ca' : 'cb', d[k].name), el('span', 'small', p.results.length ? p.w + '-' + p.l + ' in the last ' + p.results.length + ', streak ' + p.streak : 'no recent matches on Kalshi'));
       add(box, hd, p.results.length ? wl : null);
+      if (p.threeSet) box.appendChild(el('div', 'small', 'Three-set matches in that run: won ' + p.threeSet.won + ' of ' + p.threeSet.played + '.'));
       var rows = el('div', 'rows');
-      p.results.slice(0, 5).forEach(function (r) { var x = el('div'); add(x, el('span', 'l', (r.won ? 'Beat ' : 'Lost to ') + r.vs), el('span', 'r', (r.tournament || '').replace(/^(ATP|WTA) /, '').slice(0, 26) + ' · ' + day(r.t))); rows.appendChild(x); });
+      p.results.slice(0, 6).forEach(function (r) { var x = el('div'); var l = el('span', 'l', (r.won ? 'Beat ' : 'Lost to ') + r.vs); l.appendChild(el('div', 'small', (r.tournament || '').replace(/^(ATP|WTA) /, '').slice(0, 34) + ', ' + day(r.t))); add(x, l, el('span', 'r ' + (r.won ? 'up' : 'down'), r.score || (r.won ? 'won' : 'lost'))); rows.appendChild(x); });
       if (p.results.length) box.appendChild(rows);
     });
-    var h = f.h2h || [];
-    box.appendChild(el('div', 'small', h.length ? 'Head to head in the last ' + f.days + ' days: ' + h.map(function (x) { return last(d[x.winner].name) + ' (' + day(x.t) + ')'; }).join(', ') + '.' : 'No meetings in the last ' + f.days + ' days. Results come from settled Kalshi markets, oldest on the left.'));
+    box.appendChild(el('div', 'small', 'Last 75 days from settled Kalshi markets, oldest on the left. Scores from Polymarket where it listed the match.'));
+    var hb = $('dH2h'); hb.replaceChildren(); var h = f.h2h || { wins: [0, 0], meetings: [] };
+    if (!h.meetings.length) { hb.appendChild(el('div', 'small', 'No meetings on record since ' + (h.since || 2015) + '. Lower-level pairings are not all covered.' + (h.missing ? ' The history table failed to load.' : ''))); return; }
+    var g = el('div', 'big2');
+    ['a', 'b'].forEach(function (k, i) { var c = el('div'); add(c, el('div', 'v ' + (k === 'a' ? 'ca' : 'cb'), String(h.wins[i])), el('div', 'l', last(d[k].name) + ' wins')); g.appendChild(c); });
+    var rows2 = el('div', 'rows');
+    h.meetings.forEach(function (x) { var r = el('div'); var l = el('span', 'l'); add(l, el('span', x.winner === 'a' ? 'ca' : 'cb', last(d[x.winner].name)), document.createTextNode(' won')); l.appendChild(el('div', 'small', x.tournament + (x.surface ? ', ' + x.surface : '') + ', ' + new Date(x.t * 1000).toLocaleDateString([], { month: 'short', year: 'numeric' }))); add(r, l, el('span', 'r', x.score || '')); rows2.appendChild(r); });
+    add(hb, g, rows2, el('div', 'small', 'Tour-level meetings since ' + h.since + '. Latest ' + h.meetings.length + ' shown.'));
   }
 
   function stats(d) {
@@ -477,7 +485,12 @@
     row('Record, 12 months', function (p) { return p.w + '-' + p.l; });
     row('Serve points won', function (p) { return pct(p.sv); });
     row('Return points won', function (p) { return pct(p.rt); });
-    add(box, kv, el('div', 'small', 'Tour-level data to ' + d.model.through + '. Nothing newer is free, so treat these as background, not current form.' + (has(d.model.rating) ? ' Ratings alone make it ' + last(d.a.name) + ' ' + cents(d.model.rating) + '.' : '')));
+    var frac = function (x) { return x && x[1] ? Math.round(100 * x[0] / x[1]) + '% of ' + x[1] : '–'; };
+    row('Wins after taking set 1', function (p) { return p.pt ? frac(p.pt.s1w) : '–'; });
+    row('Comes back after losing set 1', function (p) { return p.pt ? frac(p.pt.s1l) : '–'; });
+    row('Deciding sets won', function (p) { return p.pt ? frac(p.pt.dec) : '–'; });
+    row('Tiebreaks won', function (p) { return p.pt ? frac(p.pt.tb) : '–'; });
+    add(box, kv, el('div', 'small', 'Set patterns cover the two years to ' + d.model.through + '. Tour-level data to ' + d.model.through + '. Nothing newer is free, so treat these as background, not current form.' + (has(d.model.rating) ? ' Ratings alone make it ' + last(d.a.name) + ' ' + cents(d.model.rating) + '.' : '')));
   }
 
   function ai() {
@@ -692,7 +705,7 @@
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
     show('detailView'); window.scrollTo(0, 0);
     ['dHead', 'dRead', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
-    $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…'));
+    $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…')); $('dH2h').replaceChildren(el('span', 'small', 'Loading meetings…'));
     $('dStatus').textContent = 'Loading…'; ai();
     loadDetail(); loadWhales(); loadForm();
     cur.timers.push(setInterval(function () { if (!document.hidden) loadDetail(); }, DETAIL_MS));
