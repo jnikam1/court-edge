@@ -4,119 +4,163 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Court Edge</title>
+<meta name="theme-color" content="#1e5a8a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
 <style>
-  /* One phone-width column. List of matches, tap one for the full read. */
+  /* Courtside scoreboard: hard-court blue band, chalk lines, ball-yellow for anything live. One column, phone first. */
   :root {
-    --bg: #f3f5f8; --panel: #ffffff; --line: #d9dfe8; --fg: #16202e; --muted: #5d6b7e;
-    --accent: #2456b8; --good: #0f7a4d; --good-bg: #e3f4ec; --warn: #9a6200; --warn-bg: #fdf1d8;
-    --idle-bg: #e9edf3; --pa: #2456b8; --pb: #b4530a; --bad: #b3261e;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --page: #edf1f0; --panel: #ffffff; --line: #d5dde0; --ink: #10202b; --muted: #586973;
+    --court: #1e5a8a; --court-deep: #174668; --on-court: #f4f8fa; --ball: #dff24a;
+    --good: #23694b; --good-bg: #e0f0e7; --warn: #a44a1f; --warn-bg: #fbe9dd; --idle-bg: #e7ecee;
+    --accent: var(--court); --pa: #1e5a8a; --pb: #b4532a; --bad: #b3261e; --fg: var(--ink); --bg: var(--page);
+    --body: "Barlow", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    --display: "Barlow Condensed", "Barlow", -apple-system, "Segoe UI", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1520; --panel: #18212f; --line: #2a3648; --fg: #e8edf5; --muted: #93a1b5;
-      --accent: #7fa8ff; --good: #5fd3a0; --good-bg: #123526; --warn: #f0b95a; --warn-bg: #3a2c10;
-      --idle-bg: #222d3d; --pa: #7fa8ff; --pb: #f0a35a; --bad: #ff8a80; color-scheme: dark;
+      --page: #0d1920; --panel: #14242e; --line: #24394a; --ink: #eaf1f4; --muted: #93a6b3;
+      --court: #6fb1e6; --court-deep: #123a58; --on-court: #f4f8fa; --ball: #dff24a;
+      --good: #6fcf97; --good-bg: #123526; --warn: #f09a6a; --warn-bg: #3a2416; --idle-bg: #1c303c;
+      --pa: #6fb1e6; --pb: #f09a6a; --bad: #ff8a80; color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body {
-    background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans);
-    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  }
-  main { max-width: 620px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
-  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
-  h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
-  .status { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .status b { color: var(--fg); font-weight: 600; }
+  body { background: var(--page); color: var(--ink); font: 16px/1.45 var(--body); font-variant-numeric: tabular-nums; -webkit-text-size-adjust: 100%; }
+  main { max-width: 640px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 26px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--court); outline-offset: 2px; }
+
+  /* masthead: the court itself */
+  .mast { background: #1e5a8a; background: linear-gradient(180deg, #1e5a8a, var(--court-deep)); color: var(--on-court); padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); border-bottom: 3px solid var(--on-court); }
+  @media (prefers-color-scheme: dark) { .mast { background: linear-gradient(180deg, #174668, #0f2f47); border-bottom-color: #c9d6dd; } }
+  .mast-in { max-width: 640px; margin: 0 auto; }
+  .word { font: 600 30px/1 var(--display); letter-spacing: 0.01em; display: flex; align-items: center; gap: 9px; }
+  .word i { width: 13px; height: 13px; border-radius: 50%; background: var(--ball); display: inline-block; }
+  .tabs { display: flex; gap: 22px; margin-top: 12px; }
+  .tabs a { color: var(--on-court); opacity: 0.72; text-decoration: none; font: 600 19px/1 var(--display); padding: 6px 0 10px; border-bottom: 4px solid transparent; margin-bottom: -3px; }
+  .tabs a[aria-current="page"] { opacity: 1; border-bottom-color: var(--ball); }
+
+  h1 { font: 600 28px/1.1 var(--display); margin: 0; }
+  h2 { font: 600 21px/1.15 var(--display); margin: 0 0 10px; color: var(--ink); }
+  .status { color: var(--muted); font-size: 14px; }
+  .status b { color: var(--ink); font-weight: 600; }
   .list { display: flex; flex-direction: column; gap: 10px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
   a.card { color: inherit; text-decoration: none; }
-  a.card:active { border-color: var(--accent); }
-  .card.bet { border-color: var(--good); box-shadow: inset 4px 0 0 var(--good); }
-  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .tour { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
-  .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--idle-bg); color: var(--muted); white-space: nowrap; }
+  a.card:active, .bet:active { background: var(--idle-bg); }
+  .card.bet { border-color: var(--good); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tour { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .chip { font-size: 13px; line-height: 1.3; padding: 3px 8px; border-radius: 6px; background: var(--idle-bg); color: var(--muted); white-space: nowrap; font-weight: 500; }
   .chip.window { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
-  .chip.live { background: var(--good-bg); color: var(--good); font-weight: 600; }
-  .players { display: grid; grid-template-columns: 1fr auto auto auto; column-gap: 12px; row-gap: 2px; align-items: baseline; }
-  .players .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
-  .players .name small { font-weight: 400; color: var(--muted); }
-  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-  .sets { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0.25em; text-align: right; white-space: nowrap; }
-  .colhead { font-size: 11px; color: var(--muted); text-align: right; text-transform: uppercase; letter-spacing: 0.05em; }
-  .verdict { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--idle-bg); }
-  .verdict b.t { display: block; font-size: 16px; }
-  .verdict.bet { background: var(--good-bg); color: var(--good); }
-  .verdict.lean, .verdict.watch { background: var(--warn-bg); color: var(--warn); }
-  .verdict ul { margin: 6px 0 0; padding-left: 18px; color: var(--fg); font-size: 13.5px; }
-  .verdict li + li { margin-top: 3px; }
-  .verdict .why { display: block; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .empty { color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
-  .notes { color: var(--muted); font-size: 13px; }
-  .notes ul { margin: 0; padding-left: 18px; }
-  .notes li + li { margin-top: 4px; }
-  .err { color: var(--warn); }
-  .back { background: none; border: 0; padding: 6px 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
-  .kv { display: grid; grid-template-columns: 1fr auto auto; column-gap: 14px; row-gap: 4px; align-items: baseline; font-size: 14px; }
-  .kv .k { color: var(--muted); min-width: 0; }
-  .kv .h { font-size: 12px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
-  .small { font-size: 13px; color: var(--muted); }
-  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
-  .seg button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
-  .seg button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .big2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .big2 > div { background: var(--idle-bg); border-radius: 8px; padding: 8px 10px; min-width: 0; }
-  .big2 .v { font: 600 22px/1.2 var(--mono); }
-  .big2 .l { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-  .split { display: flex; flex-direction: column; gap: 3px; }
-  .split .lab { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
-  .split .lab span:first-child { color: var(--muted); }
-  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--idle-bg); gap: 2px; }
-  .bar i { display: block; height: 100%; }
-  .bar .a { background: var(--pa); } .bar .b { background: var(--pb); }
-  .split .amt { display: flex; justify-content: space-between; font: 12.5px var(--mono); }
-  .ca { color: var(--pa); font-weight: 600; } .cb { color: var(--pb); font-weight: 600; }
-  .legend { display: flex; gap: 14px; font-size: 13px; flex-wrap: wrap; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
-  .rows { display: flex; flex-direction: column; }
-  .rows > div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
-  .rows > div:first-child { border-top: 0; }
-  .rows .r { text-align: right; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; }
-  .rows .l { min-width: 0; overflow-wrap: anywhere; }
-  .wl { display: inline-flex; gap: 3px; vertical-align: middle; }
-  .wl i { width: 16px; height: 16px; border-radius: 3px; font: 600 10px/16px var(--sans); text-align: center; font-style: normal; color: #fff; }
-  .wl .w { background: var(--good); } .wl .x { background: var(--bad); }
-  @media (prefers-color-scheme: dark) { .wl i { color: #0f1520; } }
-  svg.chart { width: 100%; height: auto; display: block; }
-  .ai { white-space: pre-wrap; font-size: 14px; }
-  button.go { font: inherit; font-weight: 600; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent); cursor: pointer; }
-  button.go:disabled { opacity: 0.6; }
-  .tabs { display: flex; gap: 6px; max-width: 620px; margin: 0 auto 14px; }
-  .tabs a { flex: 1; text-align: center; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); text-decoration: none; font-weight: 600; }
-  .tabs a[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+  .chip.live { background: transparent; color: var(--ink); font-weight: 600; padding-left: 0; display: inline-flex; align-items: center; gap: 6px; }
+  .chip.live::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--ball); box-shadow: 0 0 0 1.5px var(--ink); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .chip.live::before { animation: none; } .sheet { transition: none !important; } }
   .chip.good { background: var(--good-bg); color: var(--good); font-weight: 600; }
   .chip.bad { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chips .chip { white-space: normal; }
-  .bet-t { font-weight: 600; overflow-wrap: anywhere; }
-  .bet-t b { color: var(--accent); }
+
+  /* scoreboard */
+  .players { display: grid; grid-template-columns: 1fr auto auto auto; column-gap: 12px; row-gap: 6px; align-items: center; }
+  .players .name { min-width: 0; overflow-wrap: anywhere; font: 600 21px/1.15 var(--display); }
+  .players .name small { font: 500 13px var(--body); color: var(--muted); }
+  .sets { display: flex; gap: 4px; }
+  .sets b { width: 27px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 4px; font: 600 20px/1 var(--display); color: var(--muted); }
+  .sets b.w { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .sets b.cur { color: var(--ink); border-color: var(--ink); }
+  .num { text-align: right; font-weight: 500; }
+  .players .num { font: 600 19px/1 var(--display); min-width: 38px; }
+  .colhead { font-size: 12px; color: var(--muted); text-align: right; }
+
+  .verdict { font-size: 15px; padding: 11px 13px; border-radius: 10px; background: var(--idle-bg); border-left: 4px solid var(--muted); }
+  .verdict b.t { display: block; font: 600 21px/1.2 var(--display); }
+  .verdict.bet { background: var(--good-bg); border-left-color: var(--good); }
+  .verdict.lean, .verdict.watch { background: var(--warn-bg); border-left-color: var(--warn); }
+  .verdict ul { margin: 6px 0 0; padding-left: 18px; font-size: 14.5px; }
+  .verdict li + li { margin-top: 4px; }
+  .verdict .why { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 14px; padding: 13px 14px; font-size: 15px; }
+  .notes { color: var(--muted); font-size: 14px; }
+  .notes ul, .plain { margin: 0; padding-left: 18px; }
+  .notes li + li, .plain li + li { margin-top: 6px; }
+  .plain { font-size: 14.5px; }
+  .err { color: var(--warn); }
+  .back { background: none; border: 0; padding: 4px 0; color: var(--court); font: 600 18px var(--display); cursor: pointer; text-align: left; }
+  .kv { display: grid; grid-template-columns: 1fr auto auto; column-gap: 14px; row-gap: 5px; align-items: baseline; font-size: 15px; }
+  .kv .k { color: var(--muted); min-width: 0; }
+  .kv .h { font: 600 15px var(--display); text-align: right; overflow-wrap: anywhere; }
+  .small { font-size: 13.5px; color: var(--muted); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { font: 500 14.5px var(--body); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); font-weight: 600; }
+  .big2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .big2 > div { background: var(--idle-bg); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .big2 .v { font: 600 34px/1.05 var(--display); }
+  .big2 .l { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .split { display: flex; flex-direction: column; gap: 4px; }
+  .split .lab { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+  .split .lab span:first-child { color: var(--muted); }
+  .bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--idle-bg); gap: 2px; }
+  .bar i { display: block; height: 100%; }
+  .bar .a { background: var(--pa); } .bar .b { background: var(--pb); }
+  .split .amt { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 600; }
+  .ca { color: var(--pa); font-weight: 600; } .cb { color: var(--pb); font-weight: 600; }
+  .legend { display: flex; gap: 14px; font-size: 14px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+  .rows { display: flex; flex-direction: column; }
+  .rows > div, .rows > a, .rows > button { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border: 0; border-top: 1px solid var(--line); font: inherit; font-size: 14.5px; color: inherit; background: none; text-align: left; text-decoration: none; width: 100%; }
+  .rows > :first-child { border-top: 0; }
+  .rows .r { text-align: right; white-space: nowrap; font-size: 13.5px; font-weight: 500; }
+  .rows .l { min-width: 0; overflow-wrap: anywhere; }
+  .rows > a, .rows > button { cursor: pointer; padding: 13px 0; font-size: 16px; font-weight: 500; }
+  .rows > a::after, .rows > button::after { content: "›"; color: var(--muted); font-size: 20px; line-height: 1; }
+  .wl { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .wl i { width: 17px; height: 17px; border-radius: 3px; font: 600 11px/17px var(--body); text-align: center; font-style: normal; color: #fff; }
+  .wl .w { background: var(--good); } .wl .x { background: var(--bad); }
+  @media (prefers-color-scheme: dark) { .wl i { color: #0d1920; } }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .ai { white-space: pre-wrap; font-size: 15px; }
+  button.go { font: 600 16px var(--body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--court); background: var(--panel); color: var(--court); cursor: pointer; }
+  button.go:disabled { opacity: 0.6; }
+
+  /* whale bets */
+  .bet { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+  .av { width: 38px; height: 38px; border-radius: 50%; background: var(--court); color: var(--panel); display: grid; place-items: center; font: 600 18px/1 var(--display); grid-row: span 2; text-transform: uppercase; }
+  .bet .who { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-size: 14px; color: var(--muted); min-width: 0; }
+  .bet .who b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+  .bet-t { font: 600 21px/1.15 var(--display); overflow-wrap: anywhere; }
+  .bet .sub { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+  .trio { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .trio div { background: var(--idle-bg); border-radius: 8px; padding: 6px 9px; }
+  .trio span { display: block; font-size: 12px; color: var(--muted); }
+  .trio b { font: 600 19px/1.1 var(--display); }
+  .up { color: var(--good); } .down { color: var(--warn); }
+  .bet .foot { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   details.card > summary { list-style: none; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
   details.card > summary::-webkit-details-marker { display: none; }
-  details.card[open] > summary { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-  .more { color: var(--accent); font-size: 13px; font-weight: 600; }
+  details.card > summary b { font: 600 20px var(--display); }
+  details.card[open] > summary { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .more { color: var(--court); font-size: 14px; font-weight: 600; }
+
+  /* action sheet */
+  .scrim { position: fixed; inset: 0; background: rgba(8, 20, 28, 0.55); z-index: 20; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--panel); border-radius: 18px 18px 0 0; max-height: 86vh; overflow-y: auto; padding: 10px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); transform: translateY(100%); transition: transform 0.22s ease-out; }
+  .sheet.on { transform: none; }
+  .sheet-in { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 4px; }
+  .sheet h3 { font: 600 23px/1.15 var(--display); margin: 0; }
+  .sheet .x { align-self: flex-start; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales</a></nav>
+<div class="mast"><div class="mast-in"><div class="word"><i></i>Court Edge</div><nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales</a></nav></div></div>
 <main id="listView">
-  <header>
-    <h1>Court Edge</h1>
-    <div class="status" id="status">Loading Kalshi prices…</div>
-  </header>
+  <header><div class="status" id="status">Loading Kalshi prices…</div></header>
   <section><h2>Set-break gaps</h2><div class="list" id="bets"></div></section>
   <section><h2>In play</h2><div class="list" id="live"></div></section>
   <section><h2>Upcoming</h2><div class="list" id="upcoming"></div></section>
@@ -131,10 +175,7 @@
 </main>
 
 <main id="whalesView" hidden>
-  <header>
-    <h1>Whale tracker</h1>
-    <div class="status" id="wStatus">Loading open bets…</div>
-  </header>
+  <header><div class="status" id="wStatus">Loading open bets…</div></header>
   <section>
     <h2>What they hold right now</h2>
     <div class="seg" id="wFilter" role="group" aria-label="Which bets to show" style="margin-bottom:10px"></div>
@@ -162,6 +203,7 @@
   <section><div class="card" id="dHead"></div></section>
   <section><h2>Read</h2><div id="dRead"></div></section>
   <section><h2>Fair value</h2><div class="card" id="dModel"></div></section>
+  <section><h2>What history says about this spot</h2><div class="card" id="dHist"></div></section>
   <section><h2>Momentum</h2><div class="card" id="dChart"></div></section>
   <section><h2>Money on Kalshi</h2><div class="card" id="dFlow"></div></section>
   <section><h2>Polymarket wallets</h2><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></section>
@@ -169,6 +211,9 @@
   <section><h2>Ratings and serve</h2><div class="card" id="dStats"></div></section>
   <section><h2>Written analysis</h2><div class="card" id="dAi"></div></section>
 </main>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Bet details" hidden><div class="sheet-in" id="sheetIn"></div></div>
 
 <script>
 (function () {
@@ -182,7 +227,7 @@
   var pct = function (x) { return has(x) ? (x * 100).toFixed(1) + '%' : '–'; };
   var last = function (n) { var p = String(n || '').trim().split(' '); return p[p.length - 1] || n; };
   var mins = function (s) { return !has(s) ? '' : s < 90 ? s + 's ago' : Math.round(s / 60) + ' min ago'; };
-  var usd = function (x) { return !has(x) ? '–' : Math.abs(x) >= 1e6 ? '$' + (x / 1e6).toFixed(1) + 'M' : Math.abs(x) >= 1000 ? '$' + (x / 1000).toFixed(Math.abs(x) >= 1e4 ? 0 : 1) + 'k' : '$' + Math.round(x); };
+  var usd = function (x) { return !has(x) ? '–' : Math.abs(x) >= 1e9 ? '$' + (x / 1e9).toFixed(2) + 'B' : Math.abs(x) >= 1e6 ? '$' + (x / 1e6).toFixed(1) + 'M' : Math.abs(x) >= 1000 ? '$' + (x / 1000).toFixed(Math.abs(x) >= 1e4 ? 0 : 1) + 'k' : '$' + Math.round(x); };
   var signed = function (x) { return (x < 0 ? '−' : '+') + usd(Math.abs(x)); };
   var clock = function (t) { return new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
   var day = function (t) { return new Date(t * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }); };
@@ -198,14 +243,21 @@
     if (m.pm && m.pm.start) return 'Starts ' + day(Date.parse(m.pm.start) / 1000) + ' ' + clock(Date.parse(m.pm.start) / 1000);
     return 'Not started';
   }
-  function setsText(sets, k) { return sets ? sets.map(function (s) { return s[k]; }).join('') : ''; }
-  function playersGrid(m, sets) {
+  function setCells(sets, i, live) {
+    var box = el('span', 'sets'); if (!sets) return box;
+    sets.forEach(function (s, n) {
+      var cur = live && n === sets.length - 1; var won = !cur && s[i] > s[1 - i];
+      box.appendChild(el('b', cur ? 'cur' : won ? 'w' : '', String(s[i])));
+    });
+    return box;
+  }
+  function playersGrid(m, sets, live) {
     var g = el('div', 'players');
-    add(g, el('span', 'colhead', ''), el('span', 'colhead', sets ? 'Sets' : ''), el('span', 'colhead', 'Bid'), el('span', 'colhead', 'Ask'));
+    add(g, el('span', 'colhead', ''), el('span', 'colhead', ''), el('span', 'colhead', 'Bid'), el('span', 'colhead', 'Ask'));
     ['a', 'b'].forEach(function (k, i) {
       var p = m[k]; var name = el('span', 'name', p.name);
       if (m.set1 && m.set1.winner === k && !sets) add(name, document.createTextNode(' '), el('small', '', 'won set 1'));
-      add(g, name, el('span', 'sets', sets ? setsText(sets, i) : ''), el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
+      add(g, name, setCells(sets, i, live), el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
     });
     return g;
   }
@@ -221,7 +273,7 @@
     var c = el('a', 'card' + (isBet ? ' bet' : '')); c.href = '#m=' + encodeURIComponent(m.event);
     var top = el('div', 'top');
     add(top, el('span', 'tour', (m.tournament || m.tourLabel || m.tour)), el('span', 'chip' + (m.inWindow ? ' window' : m.state !== 'upcoming' ? ' live' : ''), stateText(m)));
-    add(c, top, playersGrid(m, m.pm && m.pm.live ? m.pm.sets : null), listVerdict(m));
+    add(c, top, playersGrid(m, m.pm && m.pm.live ? m.pm.sets : null, true), listVerdict(m));
     return c;
   }
   function fill(id, items, emptyText) {
@@ -252,7 +304,7 @@
     var top = el('div', 'top');
     var sc = d.score; var st = { event: d.event, a: d.a, b: d.b, state: d.state, since: d.since, inWindow: d.inWindow, set1: d.set1, pm: sc };
     add(top, el('span', 'tour', [d.tournament || d.tour, d.surface].filter(Boolean).join(' · ')), el('span', 'chip' + (d.inWindow ? ' window' : d.state !== 'upcoming' ? ' live' : ''), stateText(st)));
-    add(box, top, playersGrid(d, sc && (sc.live || sc.ended) ? sc.sets : null));
+    add(box, top, playersGrid(d, sc && (sc.live || sc.ended) ? sc.sets : null, !!(sc && sc.live)));
     var bits = [];
     if (has(d.pre)) bits.push('Pre-match ' + last(d.a.name) + ' ' + cents(d.pre) + ' / ' + last(d.b.name) + ' ' + cents(1 - d.pre));
     bits.push('Kalshi volume ' + usd(d.volume).replace('$', '') + ' contracts');
@@ -445,6 +497,9 @@
 
   function renderDetail(d) {
     cur.d = d; head(d); read(d); modelBox(d); chart(d); flow(d); stats(d);
+    var hb = $('dHist'); hb.replaceChildren();
+    if (d.history && d.history.length) { var ul = el('ul', 'plain'); d.history.forEach(function (t) { ul.appendChild(el('li', '', t)); }); add(hb, ul, el('div', 'small', 'From ' + d.historyN + ' settled Kalshi matches this year and tour results since 2011. These are base rates for the spot, not a prediction for this match.')); }
+    else hb.appendChild(el('div', 'small', 'No matching history for this spot.'));
     var s = $('dStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · refreshes every 10s'));
     if (cur.whales !== undefined) whales(d, cur.whales);
     if (cur.form !== undefined) form(d, cur.form);
@@ -470,28 +525,110 @@
   var wb = { filter: 'strong', data: null, kalshi: null, prev: 0, shown: 30, timers: [] };
   var ago = function (t) { if (!t) return ''; var s = Math.max(0, Date.now() / 1000 - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
   var recText = function (c) { return signed(c.net) + (c.n ? ' over ' + c.n + ' markets' : '') + ' (' + (c.roi >= 0 ? '+' : '−') + Math.abs(c.roi * 100).toFixed(1) + '%)'; };
+  function trio(pairs) { var t = el('div', 'trio'); pairs.forEach(function (x) { var c = el('div'); add(c, el('span', '', x[0]), el('b', x[2] || '', x[1])); t.appendChild(c); }); return t; }
   function betCard(b, d, withName) {
-    var c = el('div', 'card'); var top = el('div', 'top'); var left = el('span', 'chips');
-    add(left, el('span', 'chip' + (b.grade === 'strong' ? ' good' : b.grade === 'weak' ? ' bad' : ''), b.cat + (b.grade === 'strong' ? ' · strong' : b.grade === 'weak' ? ' · weak' : '')));
-    if (b.first && b.first > wb.prev && wb.prev) left.appendChild(el('span', 'chip window', 'New'));
-    add(top, left, el('span', 'small', ago(b.last)));
-    var t = el('div', 'bet-t'); if (withName) add(t, el('b', '', d.whales[b.who].name), document.createTextNode(' on '));
-    t.appendChild(document.createTextNode(b.outcome));
-    add(c, top, t, el('div', 'small', b.title), el('div', 'num', usd(b.usd) + ' · paid ' + cents(b.avg) + ' · now ' + cents(b.cur)));
-    c.lastChild.style.textAlign = 'left';
-    if (b.rec) c.appendChild(el('div', 'small', (withName ? 'Their ' : '') + b.cat + ' record: ' + recText(b.rec)));
+    var c = el('button', 'bet'); c.type = 'button'; var w = d.whales[b.who];
+    var who = el('div', 'who'); add(who, el('b', '', withName ? w.name : b.cat), el('span', '', ago(b.last)));
+    var diff = b.cur - b.avg;
+    add(c, withName ? el('span', 'av', w.name.replace(/^0x/, '').charAt(0)) : null, who, el('div', 'bet-t', b.outcome), el('div', 'sub', b.title),
+      trio([['Size', usd(b.usd)], ['Paid', cents(b.avg)], ['Now', cents(b.cur), Math.abs(diff) < 0.005 ? '' : diff > 0 ? 'up' : 'down']]));
+    if (!withName) { who.style.gridColumn = '1 / -1'; c.children[1].style.gridColumn = '1 / -1'; }
+    var foot = el('div', 'foot');
+    foot.appendChild(el('span', 'chip' + (b.grade === 'strong' ? ' good' : b.grade === 'weak' ? ' bad' : ''), b.rec ? b.cat + ' record ' + signed(b.rec.net) + (b.rec.n ? ' over ' + b.rec.n : '') : b.cat + ', no graded record'));
+    if (b.first && wb.prev && b.first > wb.prev) foot.appendChild(el('span', 'chip window', 'New'));
+    if (pins[b.cond]) foot.appendChild(el('span', 'chip', 'Pinned'));
+    c.appendChild(foot);
+    c.addEventListener('click', function () { openSheet(b, d); });
     return c;
   }
+
+  // ---------- action sheet for one bet ----------
+  var pins = {}; try { pins = JSON.parse(localStorage.getItem('ce-pins') || '{}') || {}; } catch (e) { pins = {}; }
+  var sheetKey = 0;
+  function closeSheet() { sheetKey++; var sh = $('sheet'); sh.classList.remove('on'); $('scrim').hidden = true; setTimeout(function () { if (!sh.classList.contains('on')) sh.hidden = true; }, 240); }
+  function sheetShell(title, sub, back) {
+    var box = $('sheetIn'); box.replaceChildren(); box.appendChild(el('div', 'grab'));
+    if (back) { var bk = el('button', 'back x', '‹ Back'); bk.type = 'button'; bk.addEventListener('click', back); box.appendChild(bk); }
+    add(box, el('h3', '', title), sub ? el('div', 'small', sub) : null);
+    return box;
+  }
+  function act(rows, label, fn, href) {
+    var r = href ? el('a') : el('button'); if (href) { r.href = href; r.target = '_blank'; r.rel = 'noopener'; } else { r.type = 'button'; r.addEventListener('click', fn); }
+    r.appendChild(el('span', 'l', label)); rows.appendChild(r);
+  }
+  function openSheet(b, d) {
+    var w = d.whales[b.who]; var menu = function () { openSheet(b, d); };
+    var box = sheetShell(w.name + ' on ' + b.outcome, b.title);
+    box.appendChild(trio([['Size', usd(b.usd)], ['Paid', cents(b.avg)], ['Now', cents(b.cur)]]));
+    var rows = el('div', 'rows');
+    act(rows, 'Their trades in this market', function () { sheetTrades(b, w, menu); });
+    act(rows, 'Who else holds this market', function () { sheetHolders(b, menu); });
+    act(rows, 'Where ' + w.name + ' wins and loses', function () { sheetProfile(b.w, w.name, menu); });
+    act(rows, 'Their latest trades anywhere', function () { sheetProfile(b.w, w.name, menu, true); });
+    act(rows, 'Open the event on Polymarket', null, 'https://polymarket.com/event/' + encodeURIComponent(b.slug));
+    act(rows, 'Open their Polymarket profile', null, 'https://polymarket.com/profile/' + b.w);
+    act(rows, pins[b.cond] ? 'Unpin this market' : 'Pin this market', function () { if (pins[b.cond]) delete pins[b.cond]; else pins[b.cond] = 1; try { localStorage.setItem('ce-pins', JSON.stringify(pins)); } catch (e) {} renderWhales(); openSheet(b, d); });
+    act(rows, 'Copy wallet address', function (ev) { var t = ev.currentTarget.firstChild; var done = function () { t.textContent = 'Copied ' + b.w.slice(0, 8) + '…'; }; if (navigator.clipboard) navigator.clipboard.writeText(b.w).then(done, function () { t.textContent = b.w; }); else t.textContent = b.w; });
+    box.appendChild(rows);
+    var cl = el('button', 'go', 'Close'); cl.type = 'button'; cl.addEventListener('click', closeSheet); box.appendChild(cl);
+    var sh = $('sheet'); sh.hidden = false; $('scrim').hidden = false; sh.scrollTop = 0; requestAnimationFrame(function () { sh.classList.add('on'); });
+  }
+  function sheetLoad(title, sub, back, url, render) {
+    var key = ++sheetKey; var box = sheetShell(title, sub, back); var hold = el('div', 'small', 'Loading…'); box.appendChild(hold);
+    get(url).then(function (r) { if (key !== sheetKey) return; hold.remove(); render(box, r); })
+      .catch(function (e) { if (key === sheetKey) hold.textContent = 'Could not load this (' + e.message + '). Go back and try again.'; });
+  }
+  function tradeRows(list, withTitle) {
+    var rows = el('div', 'rows');
+    list.forEach(function (t) { var r = el('div'); var l = el('span', 'l', (t.side === 'SELL' ? 'Sold ' : 'Bought ') + t.outcome); if (withTitle) l.appendChild(el('div', 'small', t.title + ' · ' + t.cat)); add(r, l, el('span', 'r', usd(t.usd) + ' at ' + cents(t.price) + ' · ' + ago(t.t))); rows.appendChild(r); });
+    return rows;
+  }
+  function sheetTrades(b, w, back) {
+    sheetLoad(w.name + ' in this market', b.title, back, '/api/wallet?w=' + b.w + '&cond=' + b.cond, function (box, r) {
+      if (!r.here.length) { box.appendChild(el('div', 'small', 'No trades found for this market.')); return; }
+      var buys = {}; r.here.forEach(function (t) { if (t.side === 'BUY') buys[t.outcome] = (buys[t.outcome] || 0) + t.usd; });
+      var ks = Object.keys(buys); if (ks.length > 1) box.appendChild(el('div', 'verdict watch', 'They bought both sides here: ' + ks.map(function (k) { return usd(buys[k]) + ' on ' + k; }).join(', ') + '. That is hedging or market making, not a one-way view.'));
+      add(box, el('div', 'small', 'Latest ' + r.here.length + ' fills, newest first'), tradeRows(r.here, false));
+    });
+  }
+  function sheetHolders(b, back) {
+    sheetLoad('Who holds this market', b.title, back, '/api/holders?cond=' + b.cond, function (box, r) {
+      r.sides.forEach(function (sd) {
+        add(box, el('h2', '', sd.outcome + ': ' + usd(sd.total) + ' across ' + sd.count + ' wallets'));
+        var rows = el('div', 'rows');
+        sd.top.forEach(function (h) { var row = el('div'); var l = el('span', 'l', h.name); if (h.tracked) l.appendChild(el('div', 'small', h.rec ? 'Tracked. ' + r.cat + ' record ' + signed(h.rec.net) + (h.rec.n ? ' over ' + h.rec.n : '') : 'Tracked, no ' + r.cat + ' record')); add(row, l, el('span', 'r', usd(h.usd) + ' at ' + cents(h.avg))); rows.appendChild(row); });
+        box.appendChild(rows);
+      });
+      box.appendChild(el('div', 'small', 'Holders of $50 or more, by current value.' + (r.partial ? ' Very large market, so the list may be cut short.' : '')));
+    });
+  }
+  function sheetProfile(wallet, name, back, tradesFirst) {
+    sheetLoad(name, tradesFirst ? 'Latest trades in any market' : 'Category record', back, '/api/wallet?w=' + wallet, function (box, r) {
+      box.appendChild(trio([['All time', has(r.pnl) ? signed(r.pnl) : 'n/a', r.pnl >= 0 ? 'up' : 'down'], ['Last 30 days', has(r.month) ? signed(r.month) : 'n/a', r.month >= 0 ? 'up' : 'down'], ['Volume', has(r.volume) ? usd(r.volume) : 'n/a']]));
+      var cats = function () {
+        if (!r.cats) { box.appendChild(el('div', 'small', 'This wallet is not one of the tracked ones, so there is no category record for it yet.')); return; }
+        var rows = el('div', 'rows');
+        r.cats.forEach(function (c) { var row = el('div'); add(row, add(el('span', 'l'), el('span', 'chip' + (c.grade === 'strong' ? ' good' : c.grade === 'weak' ? ' bad' : ''), c.k), document.createTextNode(c.n ? '  ' + c.n + ' markets' : '')), el('span', 'r ' + (c.net >= 0 ? 'up' : 'down'), signed(c.net) + ' (' + (c.roi >= 0 ? '+' : '−') + Math.abs(c.roi * 100).toFixed(1) + '%)')); rows.appendChild(row); });
+        add(box, el('h2', '', 'By category'), rows);
+        if (r.complete === false) box.appendChild(el('div', 'small', 'Graded on the most recent 20,000 positions only.'));
+      };
+      var trades = function () { add(box, el('h2', '', 'Latest trades'), r.recent.length ? tradeRows(r.recent.slice(0, 25), true) : el('div', 'small', 'No recent trades.')); };
+      if (tradesFirst) { trades(); cats(); } else { cats(); trades(); }
+    });
+  }
+  $('scrim').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+
   function renderWhales() {
     var d = wb.data; if (!d) return;
     var seg = $('wFilter'); seg.replaceChildren();
-    [['strong', 'Best category'], ['weak', 'Worst category'], ['all', 'All bets']].forEach(function (o) {
+    [['strong', 'Best category'], ['weak', 'Worst category'], ['all', 'All bets'], ['pin', 'Pinned']].forEach(function (o) {
       var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(wb.filter === o[0]));
       b.addEventListener('click', function () { wb.filter = o[0]; wb.shown = 30; renderWhales(); }); seg.appendChild(b);
     });
-    var list = d.bets.filter(function (b) { return wb.filter === 'all' || b.grade === wb.filter; });
+    var list = d.bets.filter(function (b) { return wb.filter === 'all' || (wb.filter === 'pin' ? !!pins[b.cond] : b.grade === wb.filter); });
     var box = $('wBets'); box.replaceChildren();
-    if (!list.length) box.appendChild(el('div', 'empty', 'No open bets of $1k+ in this group right now.'));
+    if (!list.length) box.appendChild(el('div', 'empty', wb.filter === 'pin' ? 'Nothing pinned. Tap a bet and choose Pin this market to keep it here.' : 'No open bets of $1k+ in this group right now.'));
     list.slice(0, wb.shown).forEach(function (b) { box.appendChild(betCard(b, d, true)); });
     if (list.length > wb.shown) { var m = el('button', 'go', 'Show ' + Math.min(30, list.length - wb.shown) + ' more'); m.type = 'button'; m.addEventListener('click', function () { wb.shown += 30; renderWhales(); }); box.appendChild(m); }
     var wl = $('wWhales'); var openNames = {}; wl.querySelectorAll('details[open]').forEach(function (x) { openNames[x.dataset.name] = 1; }); wl.replaceChildren();
@@ -508,6 +645,7 @@
       var inner = el('div', 'list'); inner.style.marginTop = '10px';
       w.strong.concat(w.weak).forEach(function (x) { inner.appendChild(el('div', 'small', x.k + ': ' + recText(x))); });
       if (!w.complete) inner.appendChild(el('div', 'small', 'Graded on the most recent 20,000 positions only.'));
+      var pb = el('button', 'go', 'Record and latest trades'); pb.type = 'button'; pb.addEventListener('click', function () { sheetProfile(w.w, w.name, closeSheet); var sh = $('sheet'); sh.hidden = false; $('scrim').hidden = false; requestAnimationFrame(function () { sh.classList.add('on'); }); }); inner.appendChild(pb);
       mine.forEach(function (b) { inner.appendChild(betCard(b, d, false)); });
       c.appendChild(inner); wl.appendChild(c);
     });
@@ -529,9 +667,10 @@
       c.appendChild(sm);
       var inner = el('div', 'rows'); inner.style.marginTop = '8px';
       if (p.trades.length) inner.appendChild(el('div', 'small', 'Latest trades of $100+'));
-      p.trades.forEach(function (t) { var r = el('div'); add(r, el('span', 'l', t.side + ' · ' + nm(t.ticker) + (t.resting ? ' (resting order)' : '')), el('span', 'r', usd(t.usd) + ' at ' + cents(t.avg) + ' · ' + ago(t.t))); inner.appendChild(r); });
+      p.trades.forEach(function (t) { var r = el('a'); r.href = 'https://kalshi.com/markets/' + encodeURIComponent(t.ticker.toLowerCase()); r.target = '_blank'; r.rel = 'noopener'; var l = el('span', 'l', t.side + ' on ' + nm(t.ticker) + (t.resting ? ' (resting order)' : '')); l.appendChild(el('div', 'small', usd(t.usd) + ' at ' + cents(t.avg) + ', ' + ago(t.t))); r.appendChild(l); inner.appendChild(r); });
       if (p.holds.length) inner.appendChild(el('div', 'small', 'Biggest open positions'));
-      p.holds.forEach(function (h) { var r = el('div'); add(r, el('span', 'l', h.side + ' · ' + nm(h.ticker)), el('span', 'r', usd(h.qty).replace('$', '') + ' contracts · ' + signed(h.pnl))); inner.appendChild(r); });
+      p.holds.forEach(function (h) { var r = el('a'); r.href = 'https://kalshi.com/markets/' + encodeURIComponent(h.ticker.toLowerCase()); r.target = '_blank'; r.rel = 'noopener'; var l = el('span', 'l', h.side + ' on ' + nm(h.ticker)); l.appendChild(el('div', 'small', usd(h.qty).replace('$', '') + ' contracts, ' + signed(h.pnl) + ' so far')); r.appendChild(l); inner.appendChild(r); });
+      var kp = el('a'); kp.href = 'https://kalshi.com/ideas/profiles/' + encodeURIComponent(p.nick); kp.target = '_blank'; kp.rel = 'noopener'; kp.appendChild(el('span', 'l', 'Open ' + p.nick + ' on Kalshi')); inner.appendChild(kp);
       if (!p.trades.length && !p.holds.length) inner.appendChild(el('div', 'small', 'Nothing open and no recent trades of $100+.'));
       c.appendChild(inner); box.appendChild(c);
     });
@@ -552,7 +691,7 @@
     cur.timers.forEach(clearInterval);
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
     show('detailView'); window.scrollTo(0, 0);
-    ['dHead', 'dRead', 'dModel', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
+    ['dHead', 'dRead', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
     $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…'));
     $('dStatus').textContent = 'Loading…'; ai();
     loadDetail(); loadWhales(); loadForm();
