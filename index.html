@@ -94,10 +94,24 @@
   .ai { white-space: pre-wrap; font-size: 14px; }
   button.go { font: inherit; font-weight: 600; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent); cursor: pointer; }
   button.go:disabled { opacity: 0.6; }
+  .tabs { display: flex; gap: 6px; max-width: 620px; margin: 0 auto 14px; }
+  .tabs a { flex: 1; text-align: center; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); text-decoration: none; font-weight: 600; }
+  .tabs a[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+  .chip.good { background: var(--good-bg); color: var(--good); font-weight: 600; }
+  .chip.bad { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips .chip { white-space: normal; }
+  .bet-t { font-weight: 600; overflow-wrap: anywhere; }
+  .bet-t b { color: var(--accent); }
+  details.card > summary { list-style: none; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card[open] > summary { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .more { color: var(--accent); font-size: 13px; font-weight: 600; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+<nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales</a></nav>
 <main id="listView">
   <header>
     <h1>Court Edge</h1>
@@ -112,6 +126,30 @@
       <li>Tap a match for the live read: score, fair value, price path, money flow, Polymarket wallets, form and ratings.</li>
       <li>A set-break gap shows in the first minutes after a first set ends. Tested on 2,289 Kalshi matches, that price was fair on average, so treat a gap as a lean, not a sure thing.</li>
       <li>Nothing on the match page is a proven edge. It is context for your own call, not advice.</li>
+    </ul>
+  </section>
+</main>
+
+<main id="whalesView" hidden>
+  <header>
+    <h1>Whale tracker</h1>
+    <div class="status" id="wStatus">Loading open bets…</div>
+  </header>
+  <section>
+    <h2>What they hold right now</h2>
+    <div class="seg" id="wFilter" role="group" aria-label="Which bets to show" style="margin-bottom:10px"></div>
+    <div class="list" id="wBets"></div>
+  </section>
+  <section><h2>Polymarket whales and where they win</h2><div class="list" id="wWhales"></div></section>
+  <section><h2>Open Kalshi profiles in profit</h2><div class="list" id="wKalshi"><div class="empty">Loading Kalshi profiles…</div></div></section>
+  <section class="notes">
+    <h2>How to read this</h2>
+    <ul>
+      <li>Each whale is graded per category on its own full betting history, after fees. Strong means at least $50k profit, 1% return and 30 markets in that category. Weak means $50k or more lost.</li>
+      <li>A bet tagged with a strong category is that whale betting where it has actually made money. A weak tag is the same whale betting where it loses.</li>
+      <li>New marks bets opened since your last visit on this phone. The page only updates while it is open. It cannot send alerts.</li>
+      <li>Kalshi hides positions unless a trader opts in. These are the profitable ones that did.</li>
+      <li>Past profit does not make the next bet good. Many of these accounts hedge elsewhere or make markets. Not advice.</li>
     </ul>
   </section>
 </main>
@@ -427,10 +465,93 @@
       .catch(function () { if (ev === cur.event) $('dForm').replaceChildren(el('div', 'small err', 'Could not load results.')); });
   }
 
+
+  // ---------- whales tab ----------
+  var wb = { filter: 'strong', data: null, kalshi: null, prev: 0, shown: 30, timers: [] };
+  var ago = function (t) { if (!t) return ''; var s = Math.max(0, Date.now() / 1000 - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
+  var recText = function (c) { return signed(c.net) + (c.n ? ' over ' + c.n + ' markets' : '') + ' (' + (c.roi >= 0 ? '+' : '−') + Math.abs(c.roi * 100).toFixed(1) + '%)'; };
+  function betCard(b, d, withName) {
+    var c = el('div', 'card'); var top = el('div', 'top'); var left = el('span', 'chips');
+    add(left, el('span', 'chip' + (b.grade === 'strong' ? ' good' : b.grade === 'weak' ? ' bad' : ''), b.cat + (b.grade === 'strong' ? ' · strong' : b.grade === 'weak' ? ' · weak' : '')));
+    if (b.first && b.first > wb.prev && wb.prev) left.appendChild(el('span', 'chip window', 'New'));
+    add(top, left, el('span', 'small', ago(b.last)));
+    var t = el('div', 'bet-t'); if (withName) add(t, el('b', '', d.whales[b.who].name), document.createTextNode(' on '));
+    t.appendChild(document.createTextNode(b.outcome));
+    add(c, top, t, el('div', 'small', b.title), el('div', 'num', usd(b.usd) + ' · paid ' + cents(b.avg) + ' · now ' + cents(b.cur)));
+    c.lastChild.style.textAlign = 'left';
+    if (b.rec) c.appendChild(el('div', 'small', (withName ? 'Their ' : '') + b.cat + ' record: ' + recText(b.rec)));
+    return c;
+  }
+  function renderWhales() {
+    var d = wb.data; if (!d) return;
+    var seg = $('wFilter'); seg.replaceChildren();
+    [['strong', 'Best category'], ['weak', 'Worst category'], ['all', 'All bets']].forEach(function (o) {
+      var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(wb.filter === o[0]));
+      b.addEventListener('click', function () { wb.filter = o[0]; wb.shown = 30; renderWhales(); }); seg.appendChild(b);
+    });
+    var list = d.bets.filter(function (b) { return wb.filter === 'all' || b.grade === wb.filter; });
+    var box = $('wBets'); box.replaceChildren();
+    if (!list.length) box.appendChild(el('div', 'empty', 'No open bets of $1k+ in this group right now.'));
+    list.slice(0, wb.shown).forEach(function (b) { box.appendChild(betCard(b, d, true)); });
+    if (list.length > wb.shown) { var m = el('button', 'go', 'Show ' + Math.min(30, list.length - wb.shown) + ' more'); m.type = 'button'; m.addEventListener('click', function () { wb.shown += 30; renderWhales(); }); box.appendChild(m); }
+    var wl = $('wWhales'); var openNames = {}; wl.querySelectorAll('details[open]').forEach(function (x) { openNames[x.dataset.name] = 1; }); wl.replaceChildren();
+    d.whales.forEach(function (w, k) {
+      var c = el('details', 'card'); c.dataset.name = w.name; if (openNames[w.name]) c.open = true;
+      var sm = el('summary'); var top = el('div', 'top');
+      add(top, el('b', '', w.name), el('span', 'small', 'all time ' + signed(w.pnl) + (has(w.month) && Math.abs(w.month) >= 1000 ? ' · 30 days ' + signed(w.month) : '')));
+      var ch = el('div', 'chips');
+      w.strong.forEach(function (x) { ch.appendChild(el('span', 'chip good', x.k + ' ' + signed(x.net))); });
+      w.weak.forEach(function (x) { ch.appendChild(el('span', 'chip bad', x.k + ' ' + signed(x.net))); });
+      add(sm, top, ch, el('div', 'more', w.open ? w.open + ' open bets, ' + usd(w.openUsd) + (w.inStrong ? ' · ' + w.inStrong + ' in a strong category' : '') + ' ▾' : 'No open bets of $1k+'));
+      c.appendChild(sm);
+      var mine = d.bets.filter(function (b) { return b.who === k; });
+      var inner = el('div', 'list'); inner.style.marginTop = '10px';
+      w.strong.concat(w.weak).forEach(function (x) { inner.appendChild(el('div', 'small', x.k + ': ' + recText(x))); });
+      if (!w.complete) inner.appendChild(el('div', 'small', 'Graded on the most recent 20,000 positions only.'));
+      mine.forEach(function (b) { inner.appendChild(betCard(b, d, false)); });
+      c.appendChild(inner); wl.appendChild(c);
+    });
+    var s = $('wStatus'); s.replaceChildren();
+    add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · ' + d.whales.length + ' wallets · records built ' + d.built + ' · refreshes every minute'));
+  }
+  function renderKalshi() {
+    var k = wb.kalshi; var box = $('wKalshi'); if (!k) return; box.replaceChildren();
+    var nm = function (t) { var x = k.names[t]; return x ? (x.title + (x.sub && x.title.indexOf(x.sub) < 0 ? ' · ' + x.sub : '')) : t; };
+    box.appendChild(el('div', 'small', k.visible + ' of the ' + k.scanned + ' accounts on Kalshi\'s profit leaderboards show their positions. These ' + k.profiles.length + ' are up $50k+ and active.'));
+    k.profiles.forEach(function (p) {
+      var c = el('details', 'card'); var sm = el('summary'); var top = el('div', 'top');
+      add(top, el('b', '', p.nick), el('span', 'small', 'profit ' + signed(p.pnl)));
+      var ch = el('div', 'chips');
+      (p.cats || []).forEach(function (x) { ch.appendChild(el('span', 'chip good', x[0] + ' ' + signed(x[1]))); });
+      if (!(p.cats || []).length) (p.top || []).forEach(function (x) { ch.appendChild(el('span', 'chip', 'trades ' + x)); });
+      if (p.bot) ch.appendChild(el('span', 'chip bad', 'high frequency · ' + usd(p.markets).replace('$', '') + ' markets'));
+      add(sm, top, ch, el('div', 'more', p.holdCount + ' open positions · last trade ' + (p.last ? ago(p.last) : 'not shown') + ' ▾'));
+      c.appendChild(sm);
+      var inner = el('div', 'rows'); inner.style.marginTop = '8px';
+      if (p.trades.length) inner.appendChild(el('div', 'small', 'Latest trades of $100+'));
+      p.trades.forEach(function (t) { var r = el('div'); add(r, el('span', 'l', t.side + ' · ' + nm(t.ticker) + (t.resting ? ' (resting order)' : '')), el('span', 'r', usd(t.usd) + ' at ' + cents(t.avg) + ' · ' + ago(t.t))); inner.appendChild(r); });
+      if (p.holds.length) inner.appendChild(el('div', 'small', 'Biggest open positions'));
+      p.holds.forEach(function (h) { var r = el('div'); add(r, el('span', 'l', h.side + ' · ' + nm(h.ticker)), el('span', 'r', usd(h.qty).replace('$', '') + ' contracts · ' + signed(h.pnl))); inner.appendChild(r); });
+      if (!p.trades.length && !p.holds.length) inner.appendChild(el('div', 'small', 'Nothing open and no recent trades of $100+.'));
+      c.appendChild(inner); box.appendChild(c);
+    });
+  }
+  function loadWhaleboard() {
+    get('/api/whaleboard').then(function (d) { wb.data = d; renderWhales(); try { localStorage.setItem('ce-whales-seen', String(Math.floor(Date.now() / 1000))); } catch (e) {} })
+      .catch(function (e) { $('wStatus').replaceChildren(el('span', 'err', 'Could not load whale bets (' + e.message + '). Retrying.')); });
+    get('/api/kalshi-profiles').then(function (k) { wb.kalshi = k; renderKalshi(); })
+      .catch(function () { if (!wb.kalshi) $('wKalshi').replaceChildren(el('div', 'empty', 'Could not load Kalshi profiles. Will retry.')); });
+  }
+  function openWhales() {
+    try { wb.prev = wb.prev || parseInt(localStorage.getItem('ce-whales-seen') || '0', 10) || 0; } catch (e) { wb.prev = 0; }
+    loadWhaleboard();
+    wb.timers.push(setInterval(function () { if (!document.hidden) loadWhaleboard(); }, 60000));
+  }
+
   function openDetail(ev) {
     cur.timers.forEach(clearInterval);
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
-    $('listView').hidden = true; $('detailView').hidden = false; window.scrollTo(0, 0);
+    show('detailView'); window.scrollTo(0, 0);
     ['dHead', 'dRead', 'dModel', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
     $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…'));
     $('dStatus').textContent = 'Loading…'; ai();
@@ -438,17 +559,24 @@
     cur.timers.push(setInterval(function () { if (!document.hidden) loadDetail(); }, DETAIL_MS));
     cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
   }
+  function show(view) {
+    ['listView', 'detailView', 'whalesView'].forEach(function (id) { $(id).hidden = id !== view; });
+    $('tabs').hidden = view === 'detailView';
+    if (view === 'whalesView') { $('tabW').setAttribute('aria-current', 'page'); $('tabM').removeAttribute('aria-current'); } else { $('tabM').setAttribute('aria-current', 'page'); $('tabW').removeAttribute('aria-current'); }
+  }
   function route() {
+    wb.timers.forEach(clearInterval); wb.timers = [];
     var m = /^#m=(.+)$/.exec(location.hash);
     if (m) { openDetail(decodeURIComponent(m[1])); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
-    $('detailView').hidden = true; $('listView').hidden = false; loadList();
+    if (location.hash === '#whales') { show('whalesView'); openWhales(); return; }
+    show('listView'); loadList();
   }
   $('back').addEventListener('click', function () { location.hash = ''; });
   window.addEventListener('hashchange', route);
   route();
-  setInterval(function () { if (!document.hidden && !cur.event) loadList(); }, LIST_MS);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else loadList(); });
+  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales') loadList(); }, LIST_MS);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else loadList(); });
 })();
 </script>
 </body>

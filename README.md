@@ -4,11 +4,16 @@ Phone page for Kalshi tennis. Lists every open ATP, WTA and ATP Challenger match
 the live score, a fair value from the score, the price path, taker money flow on Kalshi,
 Polymarket wallets split by lifetime profit, recent form and ratings.
 
+## Whales tab
+
+Tracks 43 top Polymarket wallets graded per category on their full betting history, shows what
+they hold right now, and lists profitable Kalshi profiles that show their positions. The
+grades live in `lib/whales.json` and `lib/kalshi_profiles.json` and are rebuilt offline.
+
 ## Deploy
 
-    npx vercel --prod
-
-Run it inside this folder. No build step and no dependencies.
+Connected to Vercel through GitHub. Every push to `main` redeploys. No build step and no
+dependencies.
 
 ## Optional: Claude write-up
 
