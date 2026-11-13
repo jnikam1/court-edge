@@ -23,5 +23,7 @@ module.exports = (req, res) => send(res, 30, async () => {
     const rows = inPlay.map((q) => { const y = find(q); return { match: lastName(q.a.name) + ' v ' + lastName(q.b.name), found: !!y, server: y ? y.server : null, points: y ? y.points : null, feedGames: y ? y.games : null, appScore: q.pm ? q.pm.sets : null }; });
     return { on: true, ttlSeconds: x.ttl, limits: x.limits, feedLiveSingles: x.matches.length, withServer: x.matches.filter((y) => y.server).length, withPoints: x.matches.filter((y) => y.points).length, kalshiInPlay: inPlay.length, matched: rows.filter((r) => r.found).length, rows: rows.slice(0, 8), tours: [...new Set(x.matches.map((y) => y.tour))] };
   });
-  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, polymarket: p, kalshi: k, form: f, feed: fd };
+  // the background logger on Cloudflare
+  const lg = await part(async () => { const r = await fetch('https://court-edge-logger.jnikam1.workers.dev/status', { headers: { Accept: 'application/json' } }); const d = await r.json(); return { http: r.status, lastRun: d.last, secondsSinceLastRun: d.last ? d.now - d.last.t : null, phones: d.phones, snapshots: d.snapshots, alertsLogged: d.alertsLogged, error: d.error || null }; });
+  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, polymarket: p, kalshi: k, form: f, feed: fd, logger: lg };
 });

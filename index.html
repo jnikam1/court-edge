@@ -885,7 +885,7 @@
 
 
   // ---------- phone alerts through the background logger ----------
-  var LOGGER_DEFAULT = '';
+  var LOGGER_DEFAULT = 'https://court-edge-logger.jnikam1.workers.dev';
   var pu = { url: LOGGER_DEFAULT, msg: '', status: null }; try { pu.url = localStorage.getItem('ce-logger') || LOGGER_DEFAULT; } catch (e) {}
   var canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   var isHome = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
@@ -896,7 +896,7 @@
     var box = $('pBox'); box.replaceChildren();
     if (!isHome) box.appendChild(el('div', 'verdict watch', 'On an iPhone this only works from the Home Screen copy of the app. In Safari tap Share, then Add to Home Screen, then open Court Edge from the new icon and come back to this box.'));
     else if (!canPush) box.appendChild(el('div', 'verdict watch', 'This browser does not support notifications for web apps.'));
-    var f = el('label', 'field', 'Logger address (from Cloudflare, ends in workers.dev)'); var inp = el('input'); inp.type = 'url'; inp.placeholder = 'https://court-edge-logger.yourname.workers.dev'; inp.value = pu.url; inp.style.fontSize = '15px'; inp.autocapitalize = 'off'; inp.autocomplete = 'off'; f.appendChild(inp);
+    var f = el('label', 'field', 'Logger address (already filled in)'); var inp = el('input'); inp.type = 'url'; inp.placeholder = 'https://court-edge-logger.yourname.workers.dev'; inp.value = pu.url; inp.style.fontSize = '15px'; inp.autocapitalize = 'off'; inp.autocomplete = 'off'; f.appendChild(inp);
     inp.addEventListener('change', function () { pu.url = inp.value.trim(); try { localStorage.setItem('ce-logger', pu.url); } catch (e) {} pu.status = null; pu.msg = ''; loadLogger(); });
     box.appendChild(f);
     var seg = el('div', 'seg'); var btn = function (label, fn) { var b = el('button', '', label); b.type = 'button'; b.addEventListener('click', fn); seg.appendChild(b); };
