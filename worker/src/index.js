@@ -1,6 +1,7 @@
 // Court Edge logger (Cloudflare Worker).
-// Every minute: read the app's own endpoints, store a price and score snapshot for each match in
-// play, record new big whale adds, and send a phone notification for each new one.
+// Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
+// in play and each NBA or NFL game near its start, record new big whale adds and injury report
+// changes for key players, and send a phone notification for each new one.
 // It also answers a few small requests from the app so a phone can sign up for notifications.
 
 const SCHEMA = [
@@ -10,6 +11,11 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS alerts (t INTEGER, id TEXT, whale TEXT, cat TEXT, title TEXT, outcome TEXT, added INTEGER, paid REAL, stake INTEGER, cur REAL, last INTEGER)',
   'CREATE TABLE IF NOT EXISTS snaps (t INTEGER, event TEXT, state TEXT, a_bid REAL, a_ask REAL, b_bid REAL, b_ask REAL, pm_a REAL, sets TEXT, points TEXT, server TEXT)',
   'CREATE INDEX IF NOT EXISTS snaps_event_t ON snaps (event, t)',
+  'CREATE TABLE IF NOT EXISTS gsnaps (t INTEGER, lg TEXT, event TEXT, state TEXT, a_bid REAL, a_ask REAL, b_bid REAL, b_ask REAL, a_score INTEGER, b_score INTEGER, period INTEGER, clock REAL, book_a REAL)',
+  'CREATE INDEX IF NOT EXISTS gsnaps_event_t ON gsnaps (event, t)',
+  'CREATE TABLE IF NOT EXISTS inj (id TEXT PRIMARY KEY, lg TEXT, team TEXT, name TEXT, tag TEXT, t INTEGER)',
+  'CREATE TABLE IF NOT EXISTS injlog (t INTEGER, lg TEXT, team TEXT, name TEXT, was TEXT, now TEXT, event TEXT, mid REAL, lo REAL, hi REAL, pushed INTEGER)',
+  'CREATE INDEX IF NOT EXISTS injlog_t ON injlog (t)',
   'CREATE INDEX IF NOT EXISTS alerts_t ON alerts (t)',
 ];
 let ready = false;
@@ -55,16 +61,21 @@ async function pushAll(env) {
   return { phones: (results || []).length, delivered: ok, statuses };
 }
 
+const kUsd = (x) => '$' + (x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : Math.round(x / 1000) + 'k');
+const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x);
+const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
 const getJson = async (url) => { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error(url.split('/api/')[1] + ' ' + r.status); return r.json(); };
 
 async function tick(env) {
   await ensure(env);
   const now = Math.floor(Date.now() / 1000); const note = { t: now };
-  const [scan, feed, al] = await Promise.all([
+  const [scan, feed, al, sp] = await Promise.all([
     getJson(env.APP_URL + '/api/scan').catch((e) => ({ error: e.message })),
     getJson(env.APP_URL + '/api/feed').catch(() => ({ off: true })),
     getJson(env.APP_URL + '/api/alerts').catch((e) => ({ error: e.message })),
+    getJson(env.APP_URL + '/api/sports?view=watch').catch((e) => ({ error: e.message })),
   ]);
+  const notes = []; // what the phone should be told this minute
   // 1) one row per match in play
   const stmts = [];
   if (scan && scan.matches) {
@@ -94,14 +105,56 @@ async function tick(env) {
       fresh++;
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
+      notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#whales', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side'), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
     }
     note.alerts = al.alerts.length; note.fresh = fresh;
   } else note.alertError = al && al.error;
-  if (stmts.length) await env.DB.batch(stmts);
-  // 3) tell the phone, but not on the very first run (everything looks new then)
   const first = !(await kvGet(env, 'started'));
   if (first) await kvSet(env, 'started', now);
-  if (fresh && !first) note.push = await pushAll(env);
+  if (first) notes.length = 0; // on the very first run everything looks new
+  // 3) NBA and NFL: a price and score row per game near its start, and injury report changes for key players
+  if (sp && sp.games) {
+    for (const g of sp.games) stmts.push(env.DB.prepare('INSERT INTO gsnaps (t, lg, event, state, a_bid, a_ask, b_bid, b_ask, a_score, b_score, period, clock, book_a) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(now, g.lg, g.event, g.state, nul(g.ab), nul(g.aa), nul(g.bb), nul(g.ba), nul(g.sa), nul(g.sb), nul(g.period), nul(g.clock), nul(g.book)));
+    note.games = sp.games.length;
+    const firstInj = !(await kvGet(env, 'inj_started'));
+    const known = new Map(((await env.DB.prepare('SELECT id, lg, team, name, tag FROM inj').all()).results || []).map((r) => [r.id, r]));
+    const seen = new Set(); const hot = (t) => HOT.indexOf(t) >= 0; let changes = 0;
+    for (const i of sp.inj || []) {
+      if (!sp.feeds || !sp.feeds[i.lg]) continue;
+      seen.add(i.id); const was = known.get(i.id); if (was && was.tag === i.tag) continue;
+      stmts.push(env.DB.prepare('INSERT INTO inj (id, lg, team, name, tag, t) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, t = excluded.t').bind(i.id, i.lg, i.team, i.name, i.tag, now));
+      if (firstInj) continue;
+      // a status change always counts. A name we have not seen before only counts if the report itself is recent.
+      const tell = was ? hot(was.tag) || hot(i.tag) : hot(i.tag) && i.t && now - i.t < 3 * 3600;
+      stmts.push(env.DB.prepare('INSERT INTO injlog (t, lg, team, name, was, now, event, mid, lo, hi, pushed) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, i.lg, i.team, i.name, was ? was.tag : null, i.tag, i.event, nul(i.mid), nul(i.lo), nul(i.hi), tell ? 1 : 0));
+      changes++;
+      if (tell) {
+        const mins = i.start ? Math.round((i.start - now) / 60) : null; const when = mins === null ? '' : mins >= 90 ? ', starts in ' + Math.round(mins / 60) + 'h' : ', starts in ' + Math.max(0, mins) + ' min';
+        notes.push({ id: 'i-' + i.id + '-' + i.tag + '-' + now, t: now, kind: 'injury', url: '/#m=' + i.event,
+          title: i.lg.toUpperCase() + ': ' + i.name + ' ' + (i.tag === 'Out' ? 'OUT' : (was && !hot(i.tag) ? 'upgraded to ' : '') + i.tag.toLowerCase()) + (was && hot(i.tag) ? ' (was ' + was.tag.toLowerCase() + ')' : ''),
+          body: i.teamName + ' v ' + i.vs + when + '. ' + (i.mid !== null && i.mid !== undefined ? i.teamName + ' ' + Math.round(i.mid * 100) + '¢ on Kalshi now. ' : '') + 'Rough worth ' + i.lo + ' to ' + i.hi + ' points (' + i.why + ').' });
+      }
+    }
+    // gone from the report while the team is still about to play: cleared to play
+    const teams = new Set(sp.teams || []);
+    for (const [id, r] of known) {
+      if (seen.has(id) || !sp.feeds || !sp.feeds[r.lg] || !teams.has(r.lg + '|' + r.team)) continue;
+      stmts.push(env.DB.prepare('DELETE FROM inj WHERE id = ?').bind(id));
+      if (firstInj) continue;
+      stmts.push(env.DB.prepare('INSERT INTO injlog (t, lg, team, name, was, now, event, mid, lo, hi, pushed) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, r.lg, r.team, r.name, r.tag, 'Off the report', null, null, null, null, hot(r.tag) ? 1 : 0));
+      changes++;
+      if (hot(r.tag)) notes.push({ id: 'i-' + id + '-off-' + now, t: now, kind: 'injury', url: '/#' + r.lg, title: r.lg.toUpperCase() + ': ' + r.name + ' is off the injury report', body: r.team + '. Was ' + r.tag.toLowerCase() + '. Check the price before it moves.' });
+    }
+    if (firstInj && sp.feeds && (sp.feeds.nba || sp.feeds.nfl)) await kvSet(env, 'inj_started', now);
+    note.injuries = (sp.inj || []).length; note.injuryChanges = changes;
+  } else note.sportsError = sp && sp.error;
+  for (let k = 0; k < stmts.length; k += 50) await env.DB.batch(stmts.slice(k, k + 50));
+  // 4) tell the phone. The push itself is empty, so the text is left where the phone can fetch it.
+  if (notes.length) {
+    const old = JSON.parse((await kvGet(env, 'notes')) || '[]');
+    await kvSet(env, 'notes', JSON.stringify(notes.concat(old).slice(0, 12)));
+    note.push = await pushAll(env); note.told = notes.length;
+  }
   await kvSet(env, 'last', JSON.stringify(note));
   return note;
 }
@@ -119,11 +172,12 @@ export default {
       if (url.pathname === '/vapid') return json({ key: (await vapid(env)).pub });
       if (url.pathname === '/status') {
         const day = Math.floor(Date.now() / 1000) - 86400;
-        const [last, subs, snaps, snaps24, alerts, firstSnap] = await Promise.all([
+        const [last, subs, snaps, snaps24, alerts, firstSnap, gs, il, tracked] = await Promise.all([
           kvGet(env, 'last'), env.DB.prepare('SELECT COUNT(*) n FROM subs').first(), env.DB.prepare('SELECT COUNT(*) n FROM snaps').first(),
           env.DB.prepare('SELECT COUNT(*) n FROM snaps WHERE t >= ?').bind(day).first(), env.DB.prepare('SELECT COUNT(*) n FROM alerts').first(), env.DB.prepare('SELECT MIN(t) t FROM snaps').first(),
+          env.DB.prepare('SELECT COUNT(*) n FROM gsnaps').first(), env.DB.prepare('SELECT COUNT(*) n FROM injlog').first(), env.DB.prepare('SELECT COUNT(*) n FROM inj').first(),
         ]);
-        return json({ ok: true, now: Math.floor(Date.now() / 1000), last: last ? JSON.parse(last) : null, phones: subs.n, snapshots: snaps.n, snapshots24h: snaps24.n, alertsLogged: alerts.n, since: firstSnap ? firstSnap.t : null });
+        return json({ ok: true, now: Math.floor(Date.now() / 1000), last: last ? JSON.parse(last) : null, phones: subs.n, snapshots: snaps.n, snapshots24h: snaps24.n, alertsLogged: alerts.n, since: firstSnap ? firstSnap.t : null, gameSnapshots: gs.n, injuryChanges: il.n, injuriesTracked: tracked.n });
       }
       if (url.pathname === '/subscribe' && req.method === 'POST') {
         const b = await req.json(); const ep = b && b.endpoint;
@@ -132,7 +186,17 @@ export default {
         return json({ ok: true });
       }
       if (url.pathname === '/unsubscribe' && req.method === 'POST') { const b = await req.json(); await env.DB.prepare('DELETE FROM subs WHERE endpoint = ?').bind(String(b && b.endpoint)).run(); return json({ ok: true }); }
-      if (url.pathname === '/test' && req.method === 'POST') return json(await pushAll(env));
+      if (url.pathname === '/test' && req.method === 'POST') {
+        const now = Math.floor(Date.now() / 1000); const old = JSON.parse((await kvGet(env, 'notes')) || '[]');
+        await kvSet(env, 'notes', JSON.stringify([{ id: 'test-' + now, t: now, kind: 'test', url: '/#whales', title: 'Court Edge test', body: 'Phone alerts are working. Whale adds and key injury changes will arrive like this.' }].concat(old).slice(0, 12)));
+        return json(await pushAll(env));
+      }
+      if (url.pathname === '/latest') { const now = Math.floor(Date.now() / 1000); return json({ now, notes: JSON.parse((await kvGet(env, 'notes')) || '[]').filter((n) => now - n.t < 900) }); }
+      if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
+      if (url.pathname === '/games') { // price and score history for one NBA or NFL game
+        const ev = url.searchParams.get('event'); if (!ev) return json({ error: 'event required' }, 400);
+        const r = await env.DB.prepare('SELECT * FROM gsnaps WHERE event = ? ORDER BY t LIMIT 3000').bind(ev).all(); return json({ snaps: r.results || [] });
+      }
       if (url.pathname === '/alerts') { const r = await env.DB.prepare('SELECT * FROM alerts ORDER BY t DESC LIMIT 100').all(); return json({ alerts: r.results || [] }); }
       if (url.pathname === '/snaps') { // price history for one match
         const ev = url.searchParams.get('event'); if (!ev) return json({ error: 'event required' }, 400);

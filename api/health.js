@@ -5,8 +5,11 @@ const { send } = require('../lib/http');
 const { form } = require('../lib/detail');
 const feed = require('../lib/feed');
 const { lastName } = require('../lib/kalshi');
+const sports = require('../lib/sports');
+const { param } = require('../lib/http');
 module.exports = (req, res) => send(res, 30, async () => {
   const t = Date.now();
+  if (param(req, 'only') === 'sports') return { asOf: new Date().toISOString(), sports: await sports.diag() }; // NBA and NFL sources on their own
   const part = async (fn) => { const s = Date.now(); try { return Object.assign(await fn(), { ms: Date.now() - s }); } catch (e) { return { error: String(e.message || e), ms: Date.now() - s }; } };
   const [f, m, p, k] = await Promise.all([
     part(async () => { const s = await scan(); const pick = s.matches.find((x) => x.tour !== 'CH') || s.matches[0]; if (!pick) return { skipped: true }; const r = await form(pick.event); return { event: pick.event, h2hTableLoaded: !r.h2h.missing, meetings: r.h2h.meetings.length, resultsA: r.a.results.length, withScores: r.a.results.filter((x) => x.score).length }; }),
@@ -25,5 +28,6 @@ module.exports = (req, res) => send(res, 30, async () => {
   });
   // the background logger on Cloudflare
   const lg = await part(async () => { const r = await fetch('https://court-edge-logger.jnikam1.workers.dev/status', { headers: { Accept: 'application/json' } }); const d = await r.json(); return { http: r.status, lastRun: d.last, secondsSinceLastRun: d.last ? d.now - d.last.t : null, phones: d.phones, snapshots: d.snapshots, alertsLogged: d.alertsLogged, error: d.error || null }; });
-  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, polymarket: p, kalshi: k, form: f, feed: fd, logger: lg };
+  const sp = await part(async () => { const d = await sports.diag(); const o = {}; for (const k of Object.keys(d)) o[k] = d[k].error ? { error: d[k].error } : { games: d[k].kalshiGames, withScores: d[k].withScores, withBook: d[k].withBook, injuryFeed: d[k].injuryFeed, keyInjuries: d[k].keyInjuries }; return o; });
+  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, sports: sp, polymarket: p, kalshi: k, form: f, feed: fd, logger: lg };
 });

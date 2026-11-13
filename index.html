@@ -177,12 +177,19 @@
   .toast span { font-size: 14px; opacity: 0.85; }
   .badge { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 6px; border-radius: 10px; background: var(--ball); color: #10202b; font: 600 14px/1.3 var(--body); text-align: center; vertical-align: 2px; }
   [hidden] { display: none !important; }
+  .sets b.sc { width: auto; min-width: 44px; padding: 0 7px; }
+  .rows .chip { align-self: flex-start; }
+  .players .name small.at { margin-left: 2px; }
+  .wl { display: flex; gap: 4px; flex-wrap: wrap; }
+  .wl b { font: 600 14px/1 var(--display); padding: 5px 7px; border-radius: 4px; background: var(--idle-bg); color: var(--muted); }
+  .wl b.W { background: var(--good-bg); color: var(--good); }
+  .sub { font: 600 17px/1.2 var(--display); margin: 2px 0 -2px; }
 </style>
 </head>
 <body>
 <div class="mast"><div class="mast-in"><div class="word"><i></i>Court Edge</div><nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales<span class="badge" id="aBadge" hidden></span></a><a href="#journal" id="tabJ">Journal</a></nav></div></div>
 <main id="listView">
-  <header><div class="status" id="status">Loading Kalshi prices…</div></header>
+  <header><div class="seg" id="tSport" role="group" aria-label="Sport" style="margin-bottom:10px"></div><div class="status" id="status">Loading Kalshi prices…</div></header>
   <section><h2>Set-break gaps</h2><div class="list" id="bets"></div></section>
   <section><h2>In play</h2><div class="list" id="live"></div></section>
   <section><h2>Upcoming</h2><div class="list" id="upcoming"></div></section>
@@ -192,6 +199,23 @@
       <li>Tap a match for the live read: score, fair value, price path, money flow, Polymarket wallets, form and ratings.</li>
       <li>A set-break gap shows in the first minutes after a first set ends. Tested on 2,289 Kalshi matches, that price was fair on average, so treat a gap as a lean, not a sure thing.</li>
       <li>Nothing on the match page is a proven edge. It is context for your own call, not advice.</li>
+    </ul>
+  </section>
+</main>
+
+<main id="gamesView" hidden>
+  <header><div class="seg" id="gSport" role="group" aria-label="Sport" style="margin-bottom:10px"></div><div class="status" id="gStatus">Loading Kalshi prices…</div></header>
+  <section><h2>Cheaper on Kalshi than the sportsbook</h2><div class="list" id="gGaps"></div></section>
+  <section><h2>In play</h2><div class="list" id="gLive"></div></section>
+  <section><h2>Injury watch</h2><div class="card" id="gInj"></div></section>
+  <section><h2>Coming up</h2><div class="list" id="gUp"></div></section>
+  <section class="notes">
+    <h2>How to read this</h2>
+    <ul>
+      <li>Prices are Kalshi's. Scores, injuries and the sportsbook line come from ESPN. The sportsbook number is DraftKings with its margin taken out.</li>
+      <li>A game moves to the top when Kalshi's ask is 3¢ or more below that sportsbook price after the fee. Most gaps are news one side has not caught up with, so check for a late injury first.</li>
+      <li>Injury watch covers leading scorers and starting quarterbacks whose status is in doubt, for games in the next day and a half. The point values are a rough guide from sportsbook rules of thumb.</li>
+      <li>Public team stats and public injury news are already in the price. The places worth testing are being early on late news, a stale Kalshi price after a line move, and resting orders during live swings. Not advice.</li>
     </ul>
   </section>
 </main>
@@ -218,7 +242,7 @@
       <li>Each whale is graded per category on its own full betting history, after fees. Strong means at least $50k profit, 1% return and 30 markets in that category. Weak means $50k or more lost.</li>
       <li>A bet tagged with a strong category is that whale betting where it has actually made money. A weak tag is the same whale betting where it loses.</li>
       <li>Big adds: a tracked whale bought $10k or more in the last 3 hours in a category it wins in, and now has $50k or more in that market. Buys under 5¢ or over 95¢ are left out.</li>
-      <li>The app checks for big adds every minute on any screen, as long as it is open and in front. Phones pause pages in the background, so it cannot alert you while closed.</li>
+      <li>The app checks for big adds every minute on any screen while it is open. For alerts with the app closed, turn on phone alerts above.</li>
       <li>New marks bets opened since your last visit on this phone.</li>
       <li>Kalshi hides positions unless a trader opts in. These are the profitable ones that did.</li>
       <li>Past profit does not make the next bet good. Many of these accounts hedge elsewhere or make markets. Not advice.</li>
@@ -234,15 +258,21 @@
   <section><div class="card" id="dHead"></div></section>
   <section><h2>Read</h2><div id="dRead"></div></section>
   <section><h2>Cost to act</h2><div class="card" id="dCalc"></div></section>
-  <section><h2>Fair value</h2><div class="card" id="dModel"></div></section>
-  <details class="fold" data-k="hist" open><summary>What history says about this spot</summary><div class="card" id="dHist"></div></details>
+  <section class="only-t"><h2>Fair value</h2><div class="card" id="dModel"></div></section>
+  <details class="fold only-g" data-k="g-inj" open><summary>Injuries that matter</summary><div class="card" id="gdInj"></div></details>
+  <details class="fold only-g" data-k="g-fair" open><summary>Prices side by side</summary><div class="card" id="gdFair"></div></details>
+  <details class="fold only-g" data-k="g-lines" open><summary>Spread and total</summary><div class="card" id="gdLines"></div></details>
+  <details class="fold only-t" data-k="hist" open><summary>What history says about this spot</summary><div class="card" id="dHist"></div></details>
   <details class="fold" data-k="chart"><summary>Momentum</summary><div class="card" id="dChart"></div></details>
-  <details class="fold" data-k="flow"><summary>Money on Kalshi</summary><div class="card" id="dFlow"></div></details>
-  <details class="fold" data-k="wallets"><summary>Polymarket wallets</summary><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></details>
-  <details class="fold" data-k="form"><summary>Recent form</summary><div class="card" id="dForm"><span class="small">Loading results…</span></div></details>
-  <details class="fold" data-k="h2h"><summary>Head to head</summary><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></details>
-  <details class="fold" data-k="stats"><summary>Player patterns and ratings</summary><div class="card" id="dStats"></div></details>
-  <details class="fold" data-k="ai"><summary>Written analysis</summary><div class="card" id="dAi"></div></details>
+  <details class="fold only-t" data-k="flow"><summary>Money on Kalshi</summary><div class="card" id="dFlow"></div></details>
+  <details class="fold only-t" data-k="wallets"><summary>Polymarket wallets</summary><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></details>
+  <details class="fold only-t" data-k="form"><summary>Recent form</summary><div class="card" id="dForm"><span class="small">Loading results…</span></div></details>
+  <details class="fold only-t" data-k="h2h"><summary>Head to head</summary><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></details>
+  <details class="fold only-t" data-k="stats"><summary>Player patterns and ratings</summary><div class="card" id="dStats"></div></details>
+  <details class="fold only-t" data-k="ai"><summary>Written analysis</summary><div class="card" id="dAi"></div></details>
+  <details class="fold only-g" data-k="g-str"><summary>Offence against defence</summary><div class="card" id="gdStr"></div></details>
+  <details class="fold only-g" data-k="g-form"><summary>Last five and rest</summary><div class="card" id="gdForm"></div></details>
+  <details class="fold only-g" data-k="g-wal"><summary>Polymarket wallets</summary><div class="card" id="gdWal"></div></details>
 </main>
 
 <main id="journalView" hidden>
@@ -360,6 +390,209 @@
     get('/api/scan').then(renderList).catch(function (e) { $('status').replaceChildren(el('span', 'err', 'Could not reach Kalshi just now (' + e.message + '). Retrying.')); });
   }
 
+  // ---------- NBA and NFL ----------
+  var gm = { league: null, data: null };
+  var leagueOf = function (ev) { return /^KXNBA/.test(ev) ? 'nba' : /^KXNFL/.test(ev) ? 'nfl' : null; };
+  function rememberSport(sp) { try { localStorage.setItem('ce-sport', sp); } catch (e) {} $('tabM').setAttribute('href', sp ? '#' + sp : '#'); }
+  function sportSeg(id, active) {
+    var box = $(id); box.replaceChildren();
+    [['', 'Tennis'], ['nba', 'NBA'], ['nfl', 'NFL']].forEach(function (o) {
+      var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(active === o[0]));
+      b.addEventListener('click', function () { if (active !== o[0]) location.hash = o[0] ? '#' + o[0] : ''; }); box.appendChild(b);
+    });
+  }
+  function gState(m) {
+    if (m.state === 'live') return m.text || 'In play';
+    if (m.state === 'closing') return 'Final · settling';
+    return m.start ? 'Starts ' + day(m.start) + ' ' + clock(m.start) : 'Not started';
+  }
+  function gameGrid(m) {
+    var g = el('div', 'players'); var on = m.state !== 'upcoming';
+    add(g, el('span', 'colhead', ''), el('span', 'colhead', ''), el('span', 'colhead', 'Bid'), el('span', 'colhead', 'Ask'));
+    ['a', 'b'].forEach(function (k) {
+      var p = m[k], o = m[k === 'a' ? 'b' : 'a']; var name = el('span', 'name', p.name);
+      add(name, document.createTextNode(' '), el('small', 'at', [p.record, k === 'b' ? 'home' : null].filter(Boolean).join(' · ')));
+      var cells = el('span', 'sets'); if (on && has(p.score)) cells.appendChild(el('b', 'sc ' + (m.state === 'closing' ? (p.score > o.score ? 'w' : '') : 'cur'), String(p.score)));
+      add(g, name, cells, el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
+    });
+    return g;
+  }
+  function injChip(i, code) { return el('span', 'chip' + (i.fresh ? ' bad' : ''), (code ? code + ' ' : '') + last(i.name) + ' ' + i.tag.toLowerCase()); }
+  function gameCard(m) {
+    var gap = m.gap && m.gap.edge >= 0.03 && m.state === 'upcoming';
+    var c = el('a', 'card' + (gap ? ' bet' : '')); c.href = '#m=' + encodeURIComponent(m.event);
+    var top = el('div', 'top'); add(top, el('span', 'tour', m.note || (m.league === 'nba' ? 'NBA' : 'NFL')), el('span', 'chip' + (m.state === 'live' ? ' live' : ''), gState(m)));
+    add(c, top, gameGrid(m));
+    var chips = el('div', 'chips'); ['a', 'b'].forEach(function (k) { (m.inj[k] || []).forEach(function (i) { chips.appendChild(injChip(i, m[k].code)); }); });
+    if (chips.children.length) c.appendChild(chips);
+    if (gap) { var v = el('div', 'verdict bet'); add(v, el('b', 't', 'Gap: ' + m[m.gap.side].name + ' at ' + cents(m.gap.ask)), el('span', 'why', m.book.name + ' fair ' + cents(m.gap.fair) + '. ' + c1(m.gap.edge) + ' after the fee.')); c.appendChild(v); }
+    else if (m.book && has(m.book.a)) c.appendChild(el('div', 'small', m.book.name + ' fair: ' + m.a.name + ' ' + cents(m.book.a) + ', ' + m.b.name + ' ' + cents(m.book.b) + (m.book.text ? ' · ' + m.book.text : '') + (has(m.book.total) ? ' · total ' + m.book.total : '')));
+    else if (m.state === 'live' && m.sit && m.sit.text) c.appendChild(el('div', 'small', m.sit.text));
+    return c;
+  }
+  function ago2(t) { var s = Math.max(0, Math.floor(Date.now() / 1000) - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; }
+  function renderGames(d) {
+    if (d.league !== gm.league) return; gm.data = d;
+    var gs = d.games || []; var put = function (id, items, empty) { var box = $(id); box.replaceChildren(); if (!items.length) { box.appendChild(el('div', 'empty', empty)); return; } items.forEach(function (m) { box.appendChild(gameCard(m)); }); };
+    var gaps = gs.filter(function (m) { return m.state === 'upcoming' && m.gap && m.gap.edge >= 0.03; });
+    put('gGaps', gaps, 'None right now. A game shows here when Kalshi asks at least 3¢ less than the sportsbook price after the fee.');
+    put('gLive', gs.filter(function (m) { return m.state !== 'upcoming'; }), 'No games in play.');
+    put('gUp', gs.filter(function (m) { return m.state === 'upcoming' && gaps.indexOf(m) < 0; }), 'No upcoming games listed.');
+    var ib = $('gInj'); ib.replaceChildren(); var w = d.watch || [];
+    if (!d.injuries) ib.appendChild(el('div', 'small', 'The injury feed is not answering right now.'));
+    else if (!w.length) ib.appendChild(el('div', 'small', 'No leading scorer or starting quarterback is in doubt for a game in the next day and a half.'));
+    else {
+      var rows = el('div', 'rows');
+      w.slice(0, 14).forEach(function (i) {
+        var a = el('a'); a.href = '#m=' + encodeURIComponent(i.event); var l = el('span', 'l', i.name + ' (' + i.team + ') ' + i.tag.toLowerCase() + (i.part ? ', ' + i.part.toLowerCase() : ''));
+        l.appendChild(el('div', 'small', (i.t ? 'Updated ' + ago2(i.t) + ' · ' : '') + 'rough worth ' + i.lo + ' to ' + i.hi + ' points (' + i.why + ')'));
+        add(a, l, i.fresh ? el('span', 'chip bad', 'new') : null); rows.appendChild(a);
+      });
+      ib.appendChild(rows);
+      if (w.length > 14) ib.appendChild(el('div', 'small', 'And ' + (w.length - 14) + ' more on the game pages.'));
+    }
+    var s = $('gStatus'); s.replaceChildren();
+    add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · ' + gs.length + ' games · refreshes every 15s' + (d.scores ? '' : ' · scores and lines are not answering, showing Kalshi prices only')));
+  }
+  function loadGames() {
+    var lg = gm.league; if (!lg) return;
+    get('/api/sports?league=' + lg).then(renderGames).catch(function (e) { if (lg === gm.league) $('gStatus').replaceChildren(el('span', 'err', 'Could not load ' + lg.toUpperCase() + ' games just now (' + e.message + '). Retrying.')); });
+  }
+
+  function gHead(d) {
+    var box = $('dHead'); box.replaceChildren();
+    var top = el('div', 'top'); add(top, el('span', 'tour', [d.label, d.note].filter(Boolean).join(' · ')), el('span', 'chip' + (d.state === 'live' ? ' live' : ''), gState(d)));
+    add(box, top, gameGrid(d));
+    var k = d.favA ? 'a' : 'b'; var pick = function (a) { return !has(a) ? null : d.favA ? a : 1 - a; };
+    var third = d.model.live ? ['Score model', cents(pick(d.model.live.a))] : ['On Polymarket', cents(d.pm && d.pm.price ? d.pm.price[d.favA ? 0 : 1] : null)];
+    box.appendChild(trio([[d[k].name + ' on Kalshi', cents(pick(d.midA))], [d.book ? d.book.name + ' fair' : 'Sportsbook fair', cents(d.book ? pick(d.book.a) : null)], third]));
+    var bits = [];
+    if (d.sit && d.sit.text && d.state === 'live') bits.push(d.sit.text);
+    if (d.book && d.book.text) bits.push((d.book.stale ? 'Closing line ' : 'Line ') + d.book.text + (has(d.book.total) ? ', total ' + d.book.total : ''));
+    if (d.weather && d.weather.text) bits.push(d.weather.text + (has(d.weather.temp) ? ' ' + d.weather.temp + '°F' : ''));
+    bits.push('Kalshi volume ' + usd(d.volume).replace('$', '') + ' contracts');
+    if (!d.hasScores) bits.push('No live score feed for this game');
+    add(box, el('div', 'small', bits.join(' · ')));
+  }
+  function gInj(d) {
+    var box = $('gdInj'); box.replaceChildren(); var any = false;
+    ['a', 'b'].forEach(function (k) {
+      var list = d.inj[k] || []; var others = k === 'a' ? d.inj.othersA : d.inj.othersB;
+      box.appendChild(el('div', 'sub', d[k].name));
+      if (!list.length) { box.appendChild(el('div', 'small', 'No leading scorer or starting quarterback in doubt.' + (others ? ' ' + others + ' other listed.' : ''))); return; }
+      any = true; var rows = el('div', 'rows');
+      list.forEach(function (i) {
+        var row = el('div'); var l = el('span', 'l', i.name + (i.pos ? ' (' + i.pos + ')' : '') + (i.part ? ', ' + i.part.toLowerCase() : ''));
+        l.appendChild(el('div', 'small', (i.t ? 'Updated ' + ago2(i.t) + '. ' : '') + 'Rough worth ' + i.lo + ' to ' + i.hi + ' points (' + i.why + ').' + (i.note ? ' ' + i.note : '')));
+        add(row, l, el('span', 'chip' + (i.fresh ? ' bad' : ''), i.tag)); rows.appendChild(row);
+      });
+      box.appendChild(rows); if (others) box.appendChild(el('div', 'small', 'Plus ' + others + ' other listed.'));
+    });
+    box.appendChild(el('div', 'small', (any ? 'Near an even game, one point of spread is about 3¢. A player who has been out for weeks is already in the price. What moves it is a change. ' : '') + 'Injury data is ESPN\'s list, which can trail the official report by some minutes.'));
+  }
+  function gFair(d) {
+    var box = $('gdFair'); box.replaceChildren(); var kv = el('div', 'kv');
+    add(kv, el('span', 'k', ''), el('span', 'h', d.a.name), el('span', 'h', d.b.name));
+    var row = function (k, a, asPct) { if (!has(a)) return; var f = asPct ? function (x) { return Math.round(x * 100) + '%'; } : cents; add(kv, el('span', 'k', k), el('span', 'num', f(a)), el('span', 'num', f(1 - a))); };
+    row('Kalshi now', d.midA);
+    if (d.pm && d.pm.price) row('Polymarket now', d.pm.price[0]);
+    if (d.book) row(d.book.name + (d.book.stale ? ' closing line' : '') + ', margin removed', d.book.a);
+    if (has(d.pre)) row('Kalshi at the start', d.pre);
+    row('ESPN pre-game projection', d.model.proj, true);
+    if (d.model.live) row('Score model, live', d.model.live.a, true);
+    row('ESPN live win probability', d.model.espn, true);
+    box.appendChild(kv);
+    if (d.book && has(d.book.mlA)) box.appendChild(el('div', 'small', d.book.name + ' moneyline: ' + d.a.name + ' ' + d.book.mlA + ', ' + d.b.name + ' ' + d.book.mlB + '.'));
+    box.appendChild(el('div', 'small', d.state === 'live' ? 'The score model treats the score gap as a random walk around the pre-game price. It knows the score and the clock, not who has the ball or who is on the floor.' : 'When these agree there is nothing to do. When Kalshi is the odd one out, look for the reason before assuming it is wrong.'));
+  }
+  function gLines(d) {
+    var box = $('gdLines'); box.replaceChildren(); var L = d.lines || {}; var flagged = [];
+    var table = function (title, set, label) {
+      box.appendChild(el('div', 'sub', title)); var kv = el('div', 'kv');
+      add(kv, el('span', 'k', ''), el('span', 'h', 'Kalshi bid / ask'), el('span', 'h', set.book + ' fair'));
+      set.rows.forEach(function (r) {
+        add(kv, el('span', 'k', label(r.strike)), el('span', 'num', cents(r.bid) + ' / ' + cents(r.ask)), el('span', 'num', has(r.fair) ? cents(r.fair) : '–'));
+        if (r.gap) flagged.push(label(r.strike) + ': ' + (r.gap.side === 'yes' ? 'Yes' : 'No') + ' at ' + cents(r.gap.at) + ' is ' + c1(r.gap.edge) + ' under the sportsbook price after the fee.');
+      });
+      box.appendChild(kv);
+    };
+    if (L.spread) table('Spread', L.spread, function (x) { return L.spread.team + ' by more than ' + x; });
+    if (L.total) table('Total points', L.total, function (x) { return 'Over ' + x; });
+    if (!L.spread && !L.total) { box.appendChild(el('div', 'small', d.book ? 'No Kalshi spread or total markets found for this game.' : 'No sportsbook line yet, so nothing to line the Kalshi spread and total markets up against.')); return; }
+    if (flagged.length) { var v = el('div', 'verdict lean'); add(v, el('b', 't', 'Off the sportsbook line')); var ul = el('ul'); flagged.forEach(function (t) { ul.appendChild(el('li', '', t)); }); v.appendChild(ul); box.appendChild(v); }
+    box.appendChild(el('div', 'small', 'The sportsbook price is only shown on the line it actually quotes. Spreads and totals trade less than the winner market, so they follow news more slowly. A gap of 3¢ or more after the fee is flagged.'));
+  }
+  function gStrength(d) {
+    var box = $('gdStr'); box.replaceChildren(); var S = d.strength || {}; var A = S.a, B = S.b;
+    if (!A && !B) { box.appendChild(el('div', 'small', 'Team numbers are not available right now.')); return; }
+    A = A || {}; B = B || {}; var kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', d.a.name), el('span', 'h', d.b.name));
+    var rk = function (v, r, dp) { return !has(v) ? '–' : (dp ? (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp) : v) + (r ? ' · ' + r + ordinal(r) : ''); };
+    var row = function (k, a, b) { if (a === '–' && b === '–') return; add(kv, el('span', 'k', k), el('span', 'num', a), el('span', 'num', b)); };
+    row('Record', has(A.w) ? A.w + '-' + A.l + (A.t ? '-' + A.t : '') : '–', has(B.w) ? B.w + '-' + B.l + (B.t ? '-' + B.t : '') : '–');
+    row('Away / home record', A.roadRec || '–', B.homeRec || '–');
+    row('Points scored a game', rk(A.pf, A.offRank), rk(B.pf, B.offRank));
+    row('Points allowed a game', rk(A.pa, A.defRank), rk(B.pa, B.defRank));
+    if (A.epa || B.epa) {
+      var ea = A.epa || {}, eb = B.epa || {};
+      row('Offence, value per play', rk(ea.off, ea.offRank, 2), rk(eb.off, eb.offRank, 2));
+      row('Passing offence', rk(ea.offPass, ea.offPassRank, 2), rk(eb.offPass, eb.offPassRank, 2));
+      row('Running offence', rk(ea.offRush, ea.offRushRank, 2), rk(eb.offRush, eb.offRushRank, 2));
+      row('Defence, value allowed per play', rk(ea.def, ea.defRank, 2), rk(eb.def, eb.defRank, 2));
+      row('Pass defence', rk(ea.defPass, ea.defPassRank, 2), rk(eb.defPass, eb.defPassRank, 2));
+      row('Run defence', rk(ea.defRush, ea.defRushRank, 2), rk(eb.defRush, eb.defRushRank, 2));
+    }
+    box.appendChild(kv);
+    if (S.notes && S.notes.length) { var ul = el('ul', 'plain'); S.notes.forEach(function (t) { ul.appendChild(el('li', '', t)); }); box.appendChild(ul); }
+    box.appendChild(el('div', 'small', (S.source === 'nflverse' ? 'Value per play is expected points added, from nflverse play-by-play through week ' + S.week + '. For a defence, lower is better and 1st is best. ' : d.league === 'nba' ? 'Points a game are not adjusted for pace. ' : '') + 'Sportsbooks already price all of this. It explains why the line is where it is, not where it is wrong.'));
+  }
+  var ordinal = function (n) { var v = n % 100; return v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'][n % 10]; };
+  function gForm(d) {
+    var box = $('gdForm'); box.replaceChildren(); var F = d.form || {}; var none = true;
+    ['a', 'b'].forEach(function (k) {
+      var list = F[k] || []; if (!list.length) return; none = false;
+      box.appendChild(el('div', 'sub', d[k].name)); var wl = el('div', 'wl');
+      list.forEach(function (e) { var b = el('b', e.res === 'W' ? 'W' : '', (e.res || '?') + ' ' + e.score + ' ' + e.at + ' ' + e.opp); b.title = day(e.t); wl.appendChild(b); });
+      box.appendChild(wl);
+      var r = d.rest ? d.rest[k] : null; if (has(r)) box.appendChild(el('div', 'small', d.state === 'upcoming' ? (r <= 1 && d.league === 'nba' ? 'Played yesterday, so this is the second night of a back-to-back.' : r + ' days since the last game.') : 'Newest first.'));
+    });
+    if (none) box.appendChild(el('div', 'small', 'Recent results are not available right now.'));
+    else box.appendChild(el('div', 'small', 'Newest first. A short run of results says little on its own, and the price already knows the schedule.'));
+  }
+  function loadGameWallets() {
+    var ev = cur.event; var d = cur.d; var box = $('gdWal'); if (!d) return;
+    if (!d.pm || !d.pm.cond) { box.replaceChildren(el('div', 'small', 'No matching Polymarket market found for this game.')); return; }
+    get('/api/wallet?cond=' + d.pm.cond).then(function (r) {
+      if (ev !== cur.event) return; box.replaceChildren();
+      (r.sides || []).forEach(function (sd) {
+        box.appendChild(el('div', 'sub', sd.outcome + ': ' + usd(sd.total) + ' across ' + sd.count + ' wallets')); var rows = el('div', 'rows');
+        sd.top.slice(0, 6).forEach(function (h) { var row = el('div'); var l = el('span', 'l', h.name); if (h.tracked) l.appendChild(el('div', 'small', h.rec ? 'Tracked. ' + r.cat + ' record ' + signed(h.rec.net) + (h.rec.n ? ' over ' + h.rec.n : '') : 'Tracked, no ' + r.cat + ' record')); add(row, l, el('span', 'r', usd(h.usd) + ' at ' + cents(h.avg))); rows.appendChild(row); });
+        box.appendChild(rows);
+      });
+      if (!(r.sides || []).length) box.appendChild(el('div', 'small', 'No holders of $50 or more yet.'));
+      box.appendChild(el('div', 'small', 'Polymarket holders of $50 or more on the winner market. Tracked means one of the graded whales from the Whales tab. Many big wallets hedge elsewhere.'));
+    }).catch(function () { if (ev === cur.event) box.replaceChildren(el('div', 'small err', 'Could not load Polymarket wallets.')); });
+  }
+  function renderGame(d) {
+    cur.d = d; gHead(d); read(d); calc(d); chart(d); gInj(d); gFair(d); gLines(d); gStrength(d); gForm(d);
+    var cond = d.pm ? d.pm.cond : null; if (cur.pmCond !== cond) { cur.pmCond = cond; loadGameWallets(); }
+    var s = $('dStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · refreshes every 10s'));
+  }
+  function loadGame() {
+    var ev = cur.event; if (!ev) return; var seq = cur.seq = (cur.seq || 0) + 1;
+    get('/api/sports?league=' + cur.league + '&event=' + encodeURIComponent(ev)).then(function (d) { if (ev === cur.event && seq === cur.seq) renderGame(d); })
+      .catch(function (e) { if (ev === cur.event) $('dStatus').replaceChildren(el('span', 'err', e.message + (cur.d ? ' Showing the last data.' : ''))); });
+  }
+  function openGame(lg, ev) {
+    cur.timers.forEach(clearInterval);
+    cur = { event: ev, kind: 'game', league: lg, srv: null, d: null, timers: [], aiText: null, pmCond: undefined };
+    show('detailView'); detailKind(true); $('back').textContent = '‹ All ' + lg.toUpperCase() + ' games'; window.scrollTo(0, 0);
+    DETAIL_BOXES.forEach(function (id) { $(id).replaceChildren(); });
+    $('gdWal').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dStatus').textContent = 'Loading…';
+    loadGame();
+    cur.timers.push(setInterval(function () { if (!document.hidden) loadGame(); }, DETAIL_MS));
+    cur.timers.push(setInterval(function () { if (!document.hidden) loadGameWallets(); }, WHALE_MS));
+  }
+
   // ---------- detail ----------
   var cur = { event: null, srv: null, d: null, timers: [], aiText: null };
 
@@ -420,7 +653,7 @@
   function chart(d) {
     var box = $('dChart'); box.replaceChildren();
     var pts = d.chart || [];
-    var favA = !has(d.pre) || d.pre >= 0.5; var who = favA ? d.a : d.b;
+    var favA = has(d.favA) ? d.favA : (!has(d.pre) || d.pre >= 0.5); var who = favA ? d.a : d.b;
     var f = function (v) { return favA ? v : 1 - v; };
     var mv = function (x) { return !has(x) ? '–' : (f(x) - (favA ? 0 : 1) >= 0 ? '+' : '−') + Math.abs(Math.round(x * 100)) + '¢'; };
     var g = el('div', 'kv'); g.style.gridTemplateColumns = 'repeat(3, 1fr)';
@@ -576,6 +809,7 @@
   }
 
   function renderDetail(d) {
+    if (cur.kind === 'game') return;
     cur.d = d;
     var ff = d.score && d.score.live ? feedFor(d, d.score.sets) : null; var auto = ff ? ff.server : null;
     if (auto !== (cur.auto || null)) { cur.auto = auto; if (!cur.srv) { loadDetail(); } }
@@ -589,6 +823,7 @@
   }
   function loadDetail() {
     var ev = cur.event; if (!ev) return;
+    if (cur.kind === 'game') { loadGame(); return; }
     var sv = cur.srv || cur.auto; var seq = cur.seq = (cur.seq || 0) + 1; // a slower, older answer must not overwrite a newer one
     get('/api/match?event=' + encodeURIComponent(ev) + (sv ? '&srv=' + sv : '')).then(function (d) { if (ev === cur.event && seq === cur.seq) renderDetail(d); })
       .catch(function (e) { if (ev === cur.event) $('dStatus').replaceChildren(el('span', 'err', e.message + (cur.d ? ' Showing the last data.' : ''))); });
@@ -771,11 +1006,16 @@
     wb.timers.push(setInterval(function () { if (!document.hidden) loadWhaleboard(); }, 60000));
   }
 
+  var DETAIL_BOXES = ['dHead', 'dRead', 'dCalc', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats', 'gdInj', 'gdFair', 'gdLines', 'gdStr', 'gdForm', 'gdWal'];
+  function detailKind(game) {
+    document.querySelectorAll('.only-t').forEach(function (e) { e.hidden = game; });
+    document.querySelectorAll('.only-g').forEach(function (e) { e.hidden = !game; });
+  }
   function openDetail(ev) {
     cur.timers.forEach(clearInterval);
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
-    show('detailView'); window.scrollTo(0, 0);
-    ['dHead', 'dRead', 'dCalc', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
+    show('detailView'); detailKind(false); $('back').textContent = '‹ All matches'; window.scrollTo(0, 0);
+    DETAIL_BOXES.forEach(function (id) { $(id).replaceChildren(); });
     $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…')); $('dH2h').replaceChildren(el('span', 'small', 'Loading meetings…'));
     $('dStatus').textContent = 'Loading…'; ai();
     loadDetail(); loadWhales(); loadForm();
@@ -783,18 +1023,20 @@
     cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
   }
   function show(view) {
-    ['listView', 'detailView', 'whalesView', 'journalView'].forEach(function (id) { $(id).hidden = id !== view; });
+    ['listView', 'gamesView', 'detailView', 'whalesView', 'journalView'].forEach(function (id) { $(id).hidden = id !== view; });
     $('tabs').hidden = view === 'detailView';
-    [['tabM', 'listView'], ['tabW', 'whalesView'], ['tabJ', 'journalView']].forEach(function (t) { if (t[1] === view) $(t[0]).setAttribute('aria-current', 'page'); else $(t[0]).removeAttribute('aria-current'); });
+    [['tabM', 'listView'], ['tabW', 'whalesView'], ['tabJ', 'journalView']].forEach(function (t) { if (t[1] === view || (t[0] === 'tabM' && view === 'gamesView')) $(t[0]).setAttribute('aria-current', 'page'); else $(t[0]).removeAttribute('aria-current'); });
   }
   function route() {
     wb.timers.forEach(clearInterval); wb.timers = [];
     var m = /^#m=(.+)$/.exec(location.hash);
-    if (m) { openDetail(decodeURIComponent(m[1])); return; }
+    if (m) { var ev = decodeURIComponent(m[1]); var lg = leagueOf(ev); if (lg) openGame(lg, ev); else openDetail(ev); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
+    var sp = location.hash === '#nba' ? 'nba' : location.hash === '#nfl' ? 'nfl' : null;
+    if (sp) { rememberSport(sp); show('gamesView'); sportSeg('gSport', sp); if (gm.league !== sp) { gm.league = sp; gm.data = null; ['gGaps', 'gLive', 'gUp', 'gInj'].forEach(function (id) { $(id).replaceChildren(); }); $('gStatus').textContent = 'Loading Kalshi prices…'; } loadGames(); badge(); return; }
     if (location.hash === '#whales') { show('whalesView'); openWhales(); renderAlerts(); badge(); loadLogger(); setTimeout(function () { al.fresh = {}; }, 60000); return; }
     if (location.hash === '#journal') { show('journalView'); renderJournal(); badge(); return; }
-    show('listView'); loadList(); badge();
+    rememberSport(''); show('listView'); sportSeg('tSport', ''); loadList(); badge();
   }
 
 
@@ -802,12 +1044,13 @@
   var J = []; try { J = JSON.parse(localStorage.getItem('ce-journal') || '[]') || []; } catch (e) { J = []; }
   var saveJ = function () { try { localStorage.setItem('ce-journal', JSON.stringify(J)); } catch (e) {} };
   var takerFee = function (p, n) { return Math.ceil(0.07 * n * p * (1 - p) * 100 - 1e-9) / 100; }; // Kalshi rounds the fee up per order
+  var makerFee = function (p, n) { return Math.ceil(0.0175 * n * p * (1 - p) * 100 - 1e-9) / 100; }; // smaller fee some markets charge on resting orders
   var money = function (x) { return (x < 0 ? '−$' : '$') + Math.abs(x).toFixed(2); };
   var cs = { side: 'a', stake: 50, mode: 'take' }; try { cs.stake = parseFloat(localStorage.getItem('ce-stake')) || 50; } catch (e) {}
   function quote(d) {
     var p = d[cs.side]; var price = cs.mode === 'take' ? p.ask : (has(p.bid) ? Math.min(has(p.ask) ? p.ask : 0.99, p.bid + 0.01) : null);
     if (!has(price) || price <= 0 || price >= 1) return null;
-    var n = Math.floor(cs.stake / price); var fee = cs.mode === 'take' ? takerFee(price, n) : 0; var cost = n * price + fee;
+    var n = Math.floor(cs.stake / price); var fee = cs.mode === 'take' ? takerFee(price, n) : d.makerFee ? makerFee(price, n) : 0; var cost = n * price + fee;
     var fair = d.model.live ? (cs.side === 'a' ? d.model.live.a : 1 - d.model.live.a) : null;
     return { price: price, n: n, fee: fee, cost: cost, be: n ? cost / n : null, fair: fair };
   }
@@ -816,11 +1059,11 @@
     if (!q || !q.n) { out.appendChild(el('div', 'small', q ? 'Stake is smaller than one contract.' : 'No price to trade at right now.')); return; }
     var kv = el('div', 'kv2'); var row = function (k, v, cls) { add(kv, el('span', 'k', k), el('span', 'v ' + (cls || ''), v)); };
     row(cs.mode === 'take' ? 'Buy at the ask' : 'Rest an order at', cents(q.price)); row('Contracts', String(q.n));
-    row('Fee', cs.mode === 'take' ? money(q.fee) : 'usually $0 if it rests'); row('Total cost', money(q.cost));
+    row('Fee', cs.mode === 'take' ? money(q.fee) : d.makerFee ? money(q.fee) + ' if it fills' : 'usually $0 if it rests'); row('Total cost', money(q.cost));
     row('You need to win', (q.be * 100).toFixed(1) + '% of the time'); row('If it wins', '+' + money(q.n - q.cost).replace('−', ''), 'up'); row('If it loses', money(-q.cost), 'down');
     out.appendChild(kv);
     if (has(q.fair)) out.appendChild(el('div', 'small', 'Model has ' + last(d[cs.side].name) + ' at ' + (q.fair * 100).toFixed(0) + '%, against the ' + (q.be * 100).toFixed(1) + '% you need. ' + (q.fair > q.be + 0.02 ? 'Above break-even on the model, which has not been proven against this market.' : 'Not above break-even.')));
-    if (cs.mode === 'rest') out.appendChild(el('div', 'small', 'A resting order only fills if someone sells to you, often right after the score moves against you. Check the fee schedule for this market before relying on zero fees.'));
+    if (cs.mode === 'rest') out.appendChild(el('div', 'small', 'A resting order only fills if someone sells to you, often right after the score moves against you.' + (d.makerFee ? ' This market charges a small fee on resting orders too, about a quarter of the normal one. It is included above.' : ' Check the fee schedule for this market before relying on zero fees.')));
     var mine = J.filter(function (x) { return x.event === d.event && x.status === 'open'; });
     mine.forEach(function (x) {
       var bid = d[x.side].bid; if (!has(bid)) return; var f2 = takerFee(bid, x.qty); var back = x.qty * bid - f2; var free = Math.min(x.qty, Math.ceil(x.cost / Math.max(0.01, bid - 0.07 * bid * (1 - bid))));
@@ -917,7 +1160,7 @@
     var st = pu.status;
     if (st && st.ok) box.appendChild(el('div', 'small', 'Logger ' + (st.last ? 'last ran ' + ago(st.last.t) : 'has not run yet') + '. ' + st.snapshots.toLocaleString() + ' price snapshots stored' + (st.since ? ' since ' + day(st.since) : '') + ', ' + st.alertsLogged + ' whale alerts logged, ' + st.phones + (st.phones === 1 ? ' phone' : ' phones') + ' signed up.'));
     else if (pu.url && st === false) box.appendChild(el('div', 'small err', 'Could not reach the logger at that address.'));
-    box.appendChild(el('div', 'small', 'The logger checks every minute and sends the same big-add alerts shown above, even with the app closed.'));
+    box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for leading scorers and starting quarterbacks, even with the app closed.'));
   }
   function loadLogger() { renderPush(); if (!pu.url) return; lg('/status').then(function (s) { pu.status = s; renderPush(); }).catch(function () { pu.status = false; renderPush(); }); }
 
@@ -980,11 +1223,13 @@
   setInterval(function () { if (!document.hidden) loadAlerts(); }, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) loadAlerts(); });
 
-  $('back').addEventListener('click', function () { location.hash = ''; });
+  $('back').addEventListener('click', function () { location.hash = cur.kind === 'game' ? '#' + cur.league : ''; });
+  try { var keep = localStorage.getItem('ce-sport'); if ((location.hash === '' || location.hash === '#') && (keep === 'nba' || keep === 'nfl')) location.replace('#' + keep); } catch (e) {}
   window.addEventListener('hashchange', route);
   route();
-  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales' && location.hash !== '#journal') loadList(); }, LIST_MS);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else if (location.hash !== '#journal') loadList(); if (!feed.timer) loadFeed(); });
+  var onGames = function () { return location.hash === '#nba' || location.hash === '#nfl'; };
+  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales' && location.hash !== '#journal') { if (onGames()) loadGames(); else loadList(); } }, LIST_MS);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else if (onGames()) loadGames(); else if (location.hash !== '#journal') loadList(); if (!feed.timer) loadFeed(); });
 })();
 </script>
 </body>
