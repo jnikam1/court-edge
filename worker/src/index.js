@@ -81,7 +81,8 @@ async function checkRules(env, now) {
     if (!m) continue;
     if (m.status !== 'active' && m.status !== 'open') { await done(-1); continue; } // market closed before the price was reached
     const bid = Number(m.yes_bid_dollars); const ask = Number(m.yes_ask_dollars);
-    const hit = r.op === 'bid>=' ? bid >= r.price - 1e-9 : ask > 0 && ask <= r.price + 1e-9;
+    const quoted = ask > 0 && ask < 1; // an empty book is not a price
+    const hit = r.op === 'bid>=' ? bid >= r.price - 1e-9 : r.op === 'bid<=' ? quoted && bid <= r.price + 1e-9 : ask > 0 && ask <= r.price + 1e-9;
     if (!hit) continue;
     await done(now); fired++;
     await tellOne(env, r.endpoint, { id: 'r-' + r.id + '-' + now, t: now, kind: 'price', url: r.url || '/#alerts', title: r.title, body: 'Now ' + Math.round(bid * 100) + '¢ bid, ' + Math.round(ask * 100) + '¢ ask on Kalshi. Checked once a minute, so the price may have moved.' });
@@ -270,7 +271,7 @@ export default {
         if (url.pathname === '/rules/delete') { await env.DB.prepare('DELETE FROM rules WHERE id = ?').bind(owner + ':' + cid).run(); return json({ ok: true }); }
         if (url.pathname !== '/rules') return json({ error: 'not found' }, 404);
         const price = Number(b.price);
-        if (typeof b.ticker !== 'string' || !/^KX[A-Z0-9]{2,30}(-[A-Z0-9]{1,30}){2}$/.test(b.ticker) || (b.op !== 'bid>=' && b.op !== 'ask<=') || !(price >= 0.01 && price <= 0.99)) return json({ error: 'That alert is not valid.' }, 400);
+        if (typeof b.ticker !== 'string' || !/^KX[A-Z0-9]{2,30}(-[A-Z0-9]{1,30}){2}$/.test(b.ticker) || ['bid>=', 'bid<=', 'ask<='].indexOf(b.op) < 0 || !(price >= 0.01 && price <= 0.99)) return json({ error: 'That alert is not valid.' }, 400);
         const mine = await env.DB.prepare('SELECT COUNT(*) n FROM rules WHERE endpoint = ? AND fired IS NULL').bind(ep).first();
         if (mine.n >= MAX_RULES) return json({ error: 'You have ' + MAX_RULES + ' open alerts. Remove one first.' }, 429);
         const link = typeof b.url === 'string' && /^\/#m=[A-Za-z0-9%_-]{1,90}$/.test(b.url) ? b.url : '/#alerts';

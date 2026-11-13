@@ -66,9 +66,23 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
 
   // the cost box in the page
   await check('cost box: a resting order never reaches the ask', () => {
-    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8'); const src = (/function restPrice\(p\) \{.*\}/.exec(html) || [])[0];
+    const html = fs.readFileSync(path.join(root, 'assets', 'app.js'), 'utf8'); const src = (/function restPrice\(p\) \{.*\}/.exec(html) || [])[0];
     assert.ok(src, 'restPrice not found'); const restPrice = new Function('has', src + '; return restPrice;')((x) => x !== null && x !== undefined);
     assert.strictEqual(restPrice({ bid: 0.49, ask: 0.50 }), 0.49); assert.strictEqual(restPrice({ bid: 0.45, ask: 0.50 }), 0.46); assert.strictEqual(restPrice({ bid: null, ask: 0.5 }), null);
+  });
+
+  // alerts and tracked positions in the page
+  await check('page: a stop needs a real two-sided quote, and a position is valued on its own venue', () => {
+    const js = fs.readFileSync(path.join(root, 'assets', 'app.js'), 'utf8'); const line = (re) => { const m = re.exec(js); assert.ok(m, 'not found: ' + re); return m[0]; };
+    const has = (x) => x !== null && x !== undefined;
+    const ruleHit = new Function('has', line(/var ruleHit = function \(r, s\) \{.*\};/) + ' return ruleHit;')(has);
+    assert.strictEqual(ruleHit({ op: 'bid<=', price: 0.5 }, { bid: 0.48, ask: 0.5 }), true); assert.strictEqual(ruleHit({ op: 'bid<=', price: 0.5 }, { bid: 0, ask: null }), false, 'no asks means no quote');
+    assert.strictEqual(ruleHit({ op: 'bid>=', price: 0.8 }, { bid: 0.8, ask: 0.82 }), true); assert.strictEqual(ruleHit({ op: 'ask<=', price: 0.3 }, { bid: 0.2, ask: 0 }), false);
+    const fns = new Function('has', [line(/var takerFee = function \(p, n\) \{.*?\};/), line(/var venueOf = function \(x\) \{.*?\};/), line(/var feeAt = function \(venue, p, n\) \{.*?\};/), line(/function pnlOf\(x\) \{.*\}/)].join('\n') + ' return { feeAt: feeAt, pnlOf: pnlOf, venueOf: venueOf };')(has);
+    assert.strictEqual(fns.feeAt('kalshi', 0.5, 100), 1.75); assert.strictEqual(fns.feeAt('polymarket', 0.5, 100), 0, 'Kalshi fees are never applied to another venue');
+    assert.strictEqual(fns.venueOf({}), 'kalshi', 'positions saved before venues existed are Kalshi');
+    const k = { venue: 'kalshi', status: 'sold', qty: 100, exit: 0.8, cost: 100 * 0.5 + 1.75 }; assert.strictEqual(Math.round(fns.pnlOf(k) * 100), Math.round((80 - 1.12 - 51.75) * 100));
+    const pm = { venue: 'polymarket', status: 'sold', qty: 100, exit: 0.8, cost: 50 }; assert.strictEqual(Math.round(fns.pnlOf(pm) * 100), 3000);
   });
 
   // the logger, with its database and the push services faked
@@ -130,6 +144,12 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       const list = await post('/rules/list', { endpoint: phone }); assert.strictEqual(list.body.rules.length, 1); assert.strictEqual(list.body.rules[0].id, 'r1'); assert.ok(list.body.rules[0].fired > 0);
       assert.strictEqual((await post('/rules/list', { endpoint: other })).body.rules.length, 0, 'another phone cannot see it');
       const note = (await post('/latest', { endpoint: phone })).body.notes.find((n) => n.kind === 'price'); assert.ok(note && /81¢ bid/.test(note.body), 'the alert text carries the price');
+      // a stop: fires when the sell price falls to the level, never on an empty book
+      assert.strictEqual((await post('/rules', Object.assign({ endpoint: phone }, rule, { id: 'r2', op: 'bid<=', price: 0.5, title: 'Knicks sell price falls to 50¢' }))).status, 200, 'a stop alert is accepted');
+      assert.strictEqual((await post('/rules', Object.assign({ endpoint: phone }, rule, { id: 'r3', op: 'bid==' }))).status, 400, 'an unknown direction is refused');
+      sent.length = 0; await run(); assert.strictEqual(sent.length, 0, 'bid at 81¢: the stop stays quiet');
+      quote = { bid: '0.0000', ask: '1.0000', status: 'active' }; await run(); assert.strictEqual(sent.length, 0, 'an empty book is not a fall to the stop');
+      quote = { bid: '0.4800', ask: '0.5000', status: 'active' }; await run(); assert.deepStrictEqual(sent, [phone], 'bid at 48¢: the stop fires once, to this phone');
     } finally { global.fetch = realFetch; }
   });
 
