@@ -829,7 +829,7 @@
   }
   function calc(d) {
     var box = $('dCalc');
-    if (box.dataset.ev !== d.event) {
+    if (box.dataset.ev !== d.event || !$('calcSide')) { // also rebuild when the box was cleared by reopening the same match
       box.dataset.ev = d.event; box.replaceChildren();
       if (has(d.pre) && d.pre < 0.5) cs.side = 'b'; else cs.side = 'a';
       if (d.read && d.read.side) cs.side = d.read.side;
