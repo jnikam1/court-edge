@@ -1,0 +1,16 @@
+# Court Edge logger: runs every minute on Cloudflare, stores history in D1, sends phone alerts.
+name = "court-edge-logger"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+workers_dev = true
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+APP_URL = "https://court-edge-eight.vercel.app"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "court-edge"
+database_id = "__D1_ID__" # filled in by the deploy workflow, which looks the database up by name

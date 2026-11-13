@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Court Edge</title>
 <meta name="theme-color" content="#1e5a8a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Court Edge">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet">
@@ -200,6 +204,7 @@
     <div class="seg" style="margin-bottom:10px"><button type="button" id="aSound" aria-pressed="false">Sound on new alert: off</button></div>
     <div class="list" id="aList"></div>
   </section>
+  <details class="fold" data-k="w-push"><summary>Alerts on this phone when the app is closed</summary><div class="card" id="pBox"></div></details>
   <section>
     <h2>What they hold right now</h2>
     <div class="seg" id="wFilter" role="group" aria-label="Which bets to show" style="margin-bottom:10px"></div>
@@ -787,7 +792,7 @@
     var m = /^#m=(.+)$/.exec(location.hash);
     if (m) { openDetail(decodeURIComponent(m[1])); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
-    if (location.hash === '#whales') { show('whalesView'); openWhales(); renderAlerts(); badge(); setTimeout(function () { al.fresh = {}; }, 60000); return; }
+    if (location.hash === '#whales') { show('whalesView'); openWhales(); renderAlerts(); badge(); loadLogger(); setTimeout(function () { al.fresh = {}; }, 60000); return; }
     if (location.hash === '#journal') { show('journalView'); renderJournal(); badge(); return; }
     show('listView'); loadList(); badge();
   }
@@ -877,6 +882,44 @@
     Object.keys(groups).forEach(function (k) { var g = groups[k]; add(kv, el('span', 'k', names[k] || k), el('span', 'num', g.w + '-' + (g.n - g.w)), el('span', 'num ' + (g.net >= 0 ? 'up' : 'down'), (g.net >= 0 ? '+' : '') + money(g.net))); });
     by.appendChild(kv);
   }
+
+
+  // ---------- phone alerts through the background logger ----------
+  var LOGGER_DEFAULT = '';
+  var pu = { url: LOGGER_DEFAULT, msg: '', status: null }; try { pu.url = localStorage.getItem('ce-logger') || LOGGER_DEFAULT; } catch (e) {}
+  var canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  var isHome = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(function () {}); }
+  var keyBytes = function (b) { var p = '='.repeat((4 - b.length % 4) % 4); var raw = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; };
+  var lg = function (path, body) { return fetch(pu.url.replace(/\/+$/, '') + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); };
+  function renderPush() {
+    var box = $('pBox'); box.replaceChildren();
+    if (!isHome) box.appendChild(el('div', 'verdict watch', 'On an iPhone this only works from the Home Screen copy of the app. In Safari tap Share, then Add to Home Screen, then open Court Edge from the new icon and come back to this box.'));
+    else if (!canPush) box.appendChild(el('div', 'verdict watch', 'This browser does not support notifications for web apps.'));
+    var f = el('label', 'field', 'Logger address (from Cloudflare, ends in workers.dev)'); var inp = el('input'); inp.type = 'url'; inp.placeholder = 'https://court-edge-logger.yourname.workers.dev'; inp.value = pu.url; inp.style.fontSize = '15px'; inp.autocapitalize = 'off'; inp.autocomplete = 'off'; f.appendChild(inp);
+    inp.addEventListener('change', function () { pu.url = inp.value.trim(); try { localStorage.setItem('ce-logger', pu.url); } catch (e) {} pu.status = null; pu.msg = ''; loadLogger(); });
+    box.appendChild(f);
+    var seg = el('div', 'seg'); var btn = function (label, fn) { var b = el('button', '', label); b.type = 'button'; b.addEventListener('click', fn); seg.appendChild(b); };
+    btn('Turn on alerts on this phone', function () {
+      if (!pu.url) { pu.msg = 'Paste the logger address first.'; renderPush(); return; }
+      if (!canPush) { pu.msg = 'Notifications are not available here. Open the app from the Home Screen icon.'; renderPush(); return; }
+      var ask = Notification.requestPermission(); // must be asked straight from the tap
+      Promise.resolve(ask).then(function (perm) { if (perm !== 'granted') throw new Error('Notifications were not allowed. Allow them for Court Edge in iPhone Settings, then try again.'); return Promise.all([navigator.serviceWorker.ready, lg('/vapid')]); })
+        .then(function (x) { return x[0].pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(x[1].key) }); })
+        .then(function (sub) { return lg('/subscribe', { endpoint: sub.endpoint }); })
+        .then(function () { pu.msg = 'Alerts are on for this phone. Send a test to check.'; loadLogger(); })
+        .catch(function (e) { pu.msg = 'Could not turn alerts on: ' + e.message; renderPush(); });
+    });
+    btn('Send a test alert', function () { if (!pu.url) return; pu.msg = 'Sending…'; renderPush(); lg('/test', {}).then(function (r) { pu.msg = r.phones ? 'Sent to ' + r.delivered + ' of ' + r.phones + ' phones. It should arrive within a few seconds.' : 'No phone has signed up yet.'; renderPush(); }).catch(function (e) { pu.msg = 'Test failed: ' + e.message; renderPush(); }); });
+    btn('Turn off', function () { if (!canPush) return; navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) { if (!sub) return; var ep = sub.endpoint; return sub.unsubscribe().then(function () { return lg('/unsubscribe', { endpoint: ep }); }); }).then(function () { pu.msg = 'Alerts are off for this phone.'; loadLogger(); }).catch(function (e) { pu.msg = e.message; renderPush(); }); });
+    box.appendChild(seg);
+    if (pu.msg) box.appendChild(el('div', 'small', pu.msg));
+    var st = pu.status;
+    if (st && st.ok) box.appendChild(el('div', 'small', 'Logger ' + (st.last ? 'last ran ' + ago(st.last.t) : 'has not run yet') + '. ' + st.snapshots.toLocaleString() + ' price snapshots stored' + (st.since ? ' since ' + day(st.since) : '') + ', ' + st.alertsLogged + ' whale alerts logged, ' + st.phones + (st.phones === 1 ? ' phone' : ' phones') + ' signed up.'));
+    else if (pu.url && st === false) box.appendChild(el('div', 'small err', 'Could not reach the logger at that address.'));
+    box.appendChild(el('div', 'small', 'The logger checks every minute and sends the same big-add alerts shown above, even with the app closed.'));
+  }
+  function loadLogger() { renderPush(); if (!pu.url) return; lg('/status').then(function (s) { pu.status = s; renderPush(); }).catch(function () { pu.status = false; renderPush(); }); }
 
   // ---------- big-add alerts: checked every minute on any screen ----------
   var al = { data: null, seen: {}, first: true, sound: false, ctx: null, fresh: {} };
