@@ -65,7 +65,7 @@
   .chips .chip { white-space: normal; }
 
   /* scoreboard */
-  .players { display: grid; grid-template-columns: 1fr auto auto auto; column-gap: 12px; row-gap: 6px; align-items: center; }
+  .players { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; column-gap: 12px; row-gap: 6px; align-items: center; }
   .players .name { min-width: 0; overflow-wrap: anywhere; font: 600 21px/1.15 var(--display); }
   .players .name small { font: 500 13px var(--body); color: var(--muted); }
   .sets { display: flex; gap: 4px; }
@@ -154,6 +154,19 @@
   .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 4px; }
   .sheet h3 { font: 600 23px/1.15 var(--display); margin: 0; }
   .sheet .x { align-self: flex-start; }
+  /* folds, feed marks, calculator, journal */
+  details.fold > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 10px; font: 600 21px/1.15 var(--display); padding: 2px 0 10px; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::after { content: "+"; color: var(--muted); font: 500 26px/1 var(--display); }
+  details.fold[open] > summary::after { content: "−"; }
+  details.fold:not([open]) > summary { padding-bottom: 2px; border-bottom: 1px solid var(--line); }
+  .sets b.pt { border-style: dashed; color: var(--ink); min-width: 34px; width: auto; padding: 0 4px; }
+  .srv { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ball); box-shadow: 0 0 0 1.5px var(--ink); margin-right: 7px; vertical-align: 3px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--muted); }
+  .field input { font: 600 20px var(--display); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kv2 { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; row-gap: 5px; font-size: 15px; }
+  .kv2 .k { color: var(--muted); } .kv2 .v { text-align: right; font-weight: 600; }
   /* alerts */
   .toast { position: fixed; left: 12px; right: 12px; top: max(12px, env(safe-area-inset-top)); z-index: 30; max-width: 616px; margin: 0 auto; background: var(--ink); color: var(--panel); border-radius: 12px; padding: 12px 14px; border-left: 6px solid var(--ball); font: inherit; text-align: left; cursor: pointer; display: block; width: calc(100% - 24px); }
   .toast b { display: block; font: 600 19px/1.2 var(--display); }
@@ -163,7 +176,7 @@
 </style>
 </head>
 <body>
-<div class="mast"><div class="mast-in"><div class="word"><i></i>Court Edge</div><nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales<span class="badge" id="aBadge" hidden></span></a></nav></div></div>
+<div class="mast"><div class="mast-in"><div class="word"><i></i>Court Edge</div><nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales<span class="badge" id="aBadge" hidden></span></a><a href="#journal" id="tabJ">Journal</a></nav></div></div>
 <main id="listView">
   <header><div class="status" id="status">Loading Kalshi prices…</div></header>
   <section><h2>Set-break gaps</h2><div class="list" id="bets"></div></section>
@@ -192,8 +205,8 @@
     <div class="seg" id="wFilter" role="group" aria-label="Which bets to show" style="margin-bottom:10px"></div>
     <div class="list" id="wBets"></div>
   </section>
-  <section><h2>Polymarket whales and where they win</h2><div class="list" id="wWhales"></div></section>
-  <section><h2>Open Kalshi profiles in profit</h2><div class="list" id="wKalshi"><div class="empty">Loading Kalshi profiles…</div></div></section>
+  <details class="fold" data-k="w-roster"><summary>Polymarket whales and where they win</summary><div class="list" id="wWhales"></div></details>
+  <details class="fold" data-k="w-kalshi"><summary>Open Kalshi profiles in profit</summary><div class="list" id="wKalshi"><div class="empty">Loading Kalshi profiles…</div></div></details>
   <section class="notes">
     <h2>How to read this</h2>
     <ul>
@@ -215,15 +228,23 @@
   </header>
   <section><div class="card" id="dHead"></div></section>
   <section><h2>Read</h2><div id="dRead"></div></section>
+  <section><h2>Cost to act</h2><div class="card" id="dCalc"></div></section>
   <section><h2>Fair value</h2><div class="card" id="dModel"></div></section>
-  <section><h2>What history says about this spot</h2><div class="card" id="dHist"></div></section>
-  <section><h2>Momentum</h2><div class="card" id="dChart"></div></section>
-  <section><h2>Money on Kalshi</h2><div class="card" id="dFlow"></div></section>
-  <section><h2>Polymarket wallets</h2><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></section>
-  <section><h2>Recent form</h2><div class="card" id="dForm"><span class="small">Loading results…</span></div></section>
-  <section><h2>Head to head</h2><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></section>
-  <section><h2>Player patterns and ratings</h2><div class="card" id="dStats"></div></section>
-  <section><h2>Written analysis</h2><div class="card" id="dAi"></div></section>
+  <details class="fold" data-k="hist" open><summary>What history says about this spot</summary><div class="card" id="dHist"></div></details>
+  <details class="fold" data-k="chart"><summary>Momentum</summary><div class="card" id="dChart"></div></details>
+  <details class="fold" data-k="flow"><summary>Money on Kalshi</summary><div class="card" id="dFlow"></div></details>
+  <details class="fold" data-k="wallets"><summary>Polymarket wallets</summary><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></details>
+  <details class="fold" data-k="form"><summary>Recent form</summary><div class="card" id="dForm"><span class="small">Loading results…</span></div></details>
+  <details class="fold" data-k="h2h"><summary>Head to head</summary><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></details>
+  <details class="fold" data-k="stats"><summary>Player patterns and ratings</summary><div class="card" id="dStats"></div></details>
+  <details class="fold" data-k="ai"><summary>Written analysis</summary><div class="card" id="dAi"></div></details>
+</main>
+
+<main id="journalView" hidden>
+  <header><div class="status">Your own bets, kept on this phone only. Add one from the Cost to act box on any match.</div></header>
+  <section><div class="card" id="jSum"></div></section>
+  <section><h2>Bets</h2><div class="list" id="jList"></div></section>
+  <section><h2>By what the app said at entry</h2><div class="card" id="jBy"></div></section>
 </main>
 
 <button class="toast" id="toast" type="button" hidden></button>
@@ -266,13 +287,36 @@
     });
     return box;
   }
+  // ---------- live point feed: point score and who is serving ----------
+  var feed = { data: null, timer: null };
+  var lastKey = function (n) { var t = String(n || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' '); return t[t.length - 1] || ''; };
+  function feedFor(m, sets) {
+    var F = feed.data; if (!F || F.off || !F.matches || !m || !m.a) return null;
+    var la = lastKey(m.a.name), lb = lastKey(m.b.name), x = null, flip = false;
+    F.matches.forEach(function (q) { if (q.k1 === la && q.k2 === lb) { x = q; flip = false; } else if (q.k1 === lb && q.k2 === la) { x = q; flip = true; } });
+    if (!x) return null;
+    var ga = flip ? x.games[1] : x.games[0], gb = flip ? x.games[0] : x.games[1];
+    // only trust the feed when its game score matches the one on screen
+    var ok = true; if (sets && sets.length) { var n = sets.length - 1; ok = ga.length === sets.length && ga[n] === sets[n][0] && gb[n] === sets[n][1]; }
+    return { ok: ok, points: ok && x.points && x.points.length === 2 ? (flip ? [x.points[1], x.points[0]] : x.points) : null, server: ok && x.server ? ((x.server === 1) !== flip ? 'a' : 'b') : null };
+  }
+  function loadFeed() {
+    get('/api/feed').then(function (f) {
+      feed.data = f; if (f.off) return;
+      clearTimeout(feed.timer); feed.timer = setTimeout(function () { if (!document.hidden) loadFeed(); else feed.timer = null; }, Math.max(10, f.ttl || 900) * 1000);
+      if (cur.event && cur.d) renderDetail(cur.d);
+    }).catch(function () {});
+  }
   function playersGrid(m, sets, live) {
-    var g = el('div', 'players');
+    var g = el('div', 'players'); var f = live ? feedFor(m, sets) : null;
     add(g, el('span', 'colhead', ''), el('span', 'colhead', ''), el('span', 'colhead', 'Bid'), el('span', 'colhead', 'Ask'));
     ['a', 'b'].forEach(function (k, i) {
-      var p = m[k]; var name = el('span', 'name', p.name);
+      var p = m[k]; var name = el('span', 'name');
+      if (f && f.server === k) { var dot = el('i', 'srv'); dot.title = 'Serving'; name.appendChild(dot); }
+      name.appendChild(document.createTextNode(p.name));
       if (m.set1 && m.set1.winner === k && !sets) add(name, document.createTextNode(' '), el('small', '', 'won set 1'));
-      add(g, name, setCells(sets, i, live), el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
+      var cells = setCells(sets, i, live); if (f && f.points) cells.appendChild(el('b', 'pt', f.points[i]));
+      add(g, name, cells, el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
     });
     return g;
   }
@@ -320,10 +364,14 @@
     var sc = d.score; var st = { event: d.event, a: d.a, b: d.b, state: d.state, since: d.since, inWindow: d.inWindow, set1: d.set1, pm: sc };
     add(top, el('span', 'tour', [d.tournament || d.tour, d.surface].filter(Boolean).join(' · ')), el('span', 'chip' + (d.inWindow ? ' window' : d.state !== 'upcoming' ? ' live' : ''), stateText(st)));
     add(box, top, playersGrid(d, sc && (sc.live || sc.ended) ? sc.sets : null, !!(sc && sc.live)));
+    var favA = !has(d.pre) || d.pre >= 0.5; var fk = favA ? 'a' : 'b'; var fn = last(d[fk].name);
+    var km = has(d.midA) ? (favA ? d.midA : 1 - d.midA) : null; var pmP = d.polymarket && d.polymarket.price ? d.polymarket.price[favA ? 0 : 1] : null;
+    var mf = d.model.live ? (favA ? d.model.live.a : 1 - d.model.live.a) : has(d.model.rating) && d.state === 'upcoming' ? (favA ? d.model.rating : 1 - d.model.rating) : null;
+    box.appendChild(trio([[fn + ' on Kalshi', cents(km)], ['On Polymarket', cents(pmP)], [d.model.live ? 'Model fair' : 'Ratings say', has(mf) ? cents(mf) : '–']]));
+    if (has(km) && has(pmP)) { var gapV = Math.abs(km - pmP); box.appendChild(el('div', 'small', gapV >= 0.04 ? 'Kalshi and Polymarket are ' + Math.round(gapV * 100) + '¢ apart. Fees on both sides cost about 3.5¢, so check both books before acting.' : 'Kalshi and Polymarket agree to within ' + Math.max(1, Math.round(gapV * 100)) + '¢. No cross-market gap here.')); }
     var bits = [];
-    if (has(d.pre)) bits.push('Pre-match ' + last(d.a.name) + ' ' + cents(d.pre) + ' / ' + last(d.b.name) + ' ' + cents(1 - d.pre));
+    if (has(d.pre)) bits.push('Pre-match '  + last(d.a.name) + ' ' + cents(d.pre) + ' / ' + last(d.b.name) + ' ' + cents(1 - d.pre));
     bits.push('Kalshi volume ' + usd(d.volume).replace('$', '') + ' contracts');
-    if (d.polymarket && d.polymarket.price) bits.push('Polymarket ' + cents(d.polymarket.price[0]) + ' / ' + cents(d.polymarket.price[1]));
     if (!sc) bits.push('No live score feed for this match');
     add(box, el('div', 'small', bits.join(' · ')));
   }
@@ -347,7 +395,7 @@
       });
       add(box, g, el('div', 'small', 'From the live score with a point-by-point model. Starting point: ' + m.live.basis + '. Gap is before fees. Mid-set numbers tend to run about 3¢ high for the player ahead.'));
       var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Who is serving');
-      [[null, 'Server unknown'], ['a', A + ' serving'], ['b', B + ' serving']].forEach(function (o) {
+      [[null, cur.auto ? 'From live feed' : 'Server unknown'], ['a', A + ' serving'], ['b', B + ' serving']].forEach(function (o) {
         var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(cur.srv === o[0]));
         b.addEventListener('click', function () { cur.srv = o[0]; loadDetail(); }); seg.appendChild(b);
       });
@@ -523,7 +571,10 @@
   }
 
   function renderDetail(d) {
-    cur.d = d; head(d); read(d); modelBox(d); chart(d); flow(d); stats(d);
+    cur.d = d;
+    var ff = d.score && d.score.live ? feedFor(d, d.score.sets) : null; var auto = ff ? ff.server : null;
+    if (auto !== (cur.auto || null)) { cur.auto = auto; if (!cur.srv) { loadDetail(); } }
+    head(d); read(d); calc(d); modelBox(d); chart(d); flow(d); stats(d);
     var hb = $('dHist'); hb.replaceChildren();
     if (d.history && d.history.length) { var ul = el('ul', 'plain'); d.history.forEach(function (t) { ul.appendChild(el('li', '', t)); }); add(hb, ul, el('div', 'small', 'From ' + d.historyN + ' settled Kalshi matches this year and tour results since 2011. These are base rates for the spot, not a prediction for this match.')); }
     else hb.appendChild(el('div', 'small', 'No matching history for this spot.'));
@@ -533,7 +584,8 @@
   }
   function loadDetail() {
     var ev = cur.event; if (!ev) return;
-    get('/api/match?event=' + encodeURIComponent(ev) + (cur.srv ? '&srv=' + cur.srv : '')).then(function (d) { if (ev === cur.event) renderDetail(d); })
+    var sv = cur.srv || cur.auto; var seq = cur.seq = (cur.seq || 0) + 1; // a slower, older answer must not overwrite a newer one
+    get('/api/match?event=' + encodeURIComponent(ev) + (sv ? '&srv=' + sv : '')).then(function (d) { if (ev === cur.event && seq === cur.seq) renderDetail(d); })
       .catch(function (e) { if (ev === cur.event) $('dStatus').replaceChildren(el('span', 'err', e.message + (cur.d ? ' Showing the last data.' : ''))); });
   }
   function loadWhales() {
@@ -718,7 +770,7 @@
     cur.timers.forEach(clearInterval);
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
     show('detailView'); window.scrollTo(0, 0);
-    ['dHead', 'dRead', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
+    ['dHead', 'dRead', 'dCalc', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats'].forEach(function (id) { $(id).replaceChildren(); });
     $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…')); $('dH2h').replaceChildren(el('span', 'small', 'Loading meetings…'));
     $('dStatus').textContent = 'Loading…'; ai();
     loadDetail(); loadWhales(); loadForm();
@@ -726,9 +778,9 @@
     cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
   }
   function show(view) {
-    ['listView', 'detailView', 'whalesView'].forEach(function (id) { $(id).hidden = id !== view; });
+    ['listView', 'detailView', 'whalesView', 'journalView'].forEach(function (id) { $(id).hidden = id !== view; });
     $('tabs').hidden = view === 'detailView';
-    if (view === 'whalesView') { $('tabW').setAttribute('aria-current', 'page'); $('tabM').removeAttribute('aria-current'); } else { $('tabM').setAttribute('aria-current', 'page'); $('tabW').removeAttribute('aria-current'); }
+    [['tabM', 'listView'], ['tabW', 'whalesView'], ['tabJ', 'journalView']].forEach(function (t) { if (t[1] === view) $(t[0]).setAttribute('aria-current', 'page'); else $(t[0]).removeAttribute('aria-current'); });
   }
   function route() {
     wb.timers.forEach(clearInterval); wb.timers = [];
@@ -736,7 +788,94 @@
     if (m) { openDetail(decodeURIComponent(m[1])); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
     if (location.hash === '#whales') { show('whalesView'); openWhales(); renderAlerts(); badge(); setTimeout(function () { al.fresh = {}; }, 60000); return; }
+    if (location.hash === '#journal') { show('journalView'); renderJournal(); badge(); return; }
     show('listView'); loadList(); badge();
+  }
+
+
+  // ---------- cost to act, and your own journal ----------
+  var J = []; try { J = JSON.parse(localStorage.getItem('ce-journal') || '[]') || []; } catch (e) { J = []; }
+  var saveJ = function () { try { localStorage.setItem('ce-journal', JSON.stringify(J)); } catch (e) {} };
+  var takerFee = function (p, n) { return Math.ceil(0.07 * n * p * (1 - p) * 100 - 1e-9) / 100; }; // Kalshi rounds the fee up per order
+  var money = function (x) { return (x < 0 ? '−$' : '$') + Math.abs(x).toFixed(2); };
+  var cs = { side: 'a', stake: 50, mode: 'take' }; try { cs.stake = parseFloat(localStorage.getItem('ce-stake')) || 50; } catch (e) {}
+  function quote(d) {
+    var p = d[cs.side]; var price = cs.mode === 'take' ? p.ask : (has(p.bid) ? Math.min(has(p.ask) ? p.ask : 0.99, p.bid + 0.01) : null);
+    if (!has(price) || price <= 0 || price >= 1) return null;
+    var n = Math.floor(cs.stake / price); var fee = cs.mode === 'take' ? takerFee(price, n) : 0; var cost = n * price + fee;
+    var fair = d.model.live ? (cs.side === 'a' ? d.model.live.a : 1 - d.model.live.a) : null;
+    return { price: price, n: n, fee: fee, cost: cost, be: n ? cost / n : null, fair: fair };
+  }
+  function calcOut(d) {
+    var out = $('calcOut'); if (!out) return; out.replaceChildren(); var q = quote(d);
+    if (!q || !q.n) { out.appendChild(el('div', 'small', q ? 'Stake is smaller than one contract.' : 'No price to trade at right now.')); return; }
+    var kv = el('div', 'kv2'); var row = function (k, v, cls) { add(kv, el('span', 'k', k), el('span', 'v ' + (cls || ''), v)); };
+    row(cs.mode === 'take' ? 'Buy at the ask' : 'Rest an order at', cents(q.price)); row('Contracts', String(q.n));
+    row('Fee', cs.mode === 'take' ? money(q.fee) : 'usually $0 if it rests'); row('Total cost', money(q.cost));
+    row('You need to win', (q.be * 100).toFixed(1) + '% of the time'); row('If it wins', '+' + money(q.n - q.cost).replace('−', ''), 'up'); row('If it loses', money(-q.cost), 'down');
+    out.appendChild(kv);
+    if (has(q.fair)) out.appendChild(el('div', 'small', 'Model has ' + last(d[cs.side].name) + ' at ' + (q.fair * 100).toFixed(0) + '%, against the ' + (q.be * 100).toFixed(1) + '% you need. ' + (q.fair > q.be + 0.02 ? 'Above break-even on the model, which has not been proven against this market.' : 'Not above break-even.')));
+    if (cs.mode === 'rest') out.appendChild(el('div', 'small', 'A resting order only fills if someone sells to you, often right after the score moves against you. Check the fee schedule for this market before relying on zero fees.'));
+    var mine = J.filter(function (x) { return x.event === d.event && x.status === 'open'; });
+    mine.forEach(function (x) {
+      var bid = d[x.side].bid; if (!has(bid)) return; var f2 = takerFee(bid, x.qty); var back = x.qty * bid - f2; var free = Math.min(x.qty, Math.ceil(x.cost / Math.max(0.01, bid - 0.07 * bid * (1 - bid))));
+      out.appendChild(el('div', 'verdict', 'Your ' + x.qty + ' on ' + last(d[x.side].name) + ' at ' + cents(x.price) + ': selling now at ' + cents(bid) + ' returns ' + money(back) + ' after a ' + money(f2) + ' fee, ' + (back - x.cost >= 0 ? 'up ' : 'down ') + money(Math.abs(back - x.cost)) + '.' + (bid > x.price && free < x.qty ? ' Sell ' + free + ' to get your stake back and let ' + (x.qty - free) + ' ride.' : '')));
+    });
+  }
+  function calc(d) {
+    var box = $('dCalc');
+    if (box.dataset.ev !== d.event) {
+      box.dataset.ev = d.event; box.replaceChildren();
+      if (has(d.pre) && d.pre < 0.5) cs.side = 'b'; else cs.side = 'a';
+      if (d.read && d.read.side) cs.side = d.read.side;
+      var sides = el('div', 'seg'); sides.id = 'calcSide'; var modes = el('div', 'seg'); modes.id = 'calcMode';
+      var f1 = el('label', 'field', 'Stake in dollars'); var inp = el('input'); inp.type = 'number'; inp.inputMode = 'decimal'; inp.min = '1'; inp.step = '1'; inp.value = String(cs.stake); f1.appendChild(inp);
+      inp.addEventListener('input', function () { cs.stake = Math.max(0, parseFloat(inp.value) || 0); try { localStorage.setItem('ce-stake', String(cs.stake)); } catch (e) {} if (cur.d) calcOut(cur.d); });
+      var out = el('div'); out.id = 'calcOut'; out.style.display = 'flex'; out.style.flexDirection = 'column'; out.style.gap = '8px';
+      var logB = el('button', 'go', 'Add this bet to my journal'); logB.type = 'button';
+      logB.addEventListener('click', function () {
+        var dd = cur.d; var q = dd ? quote(dd) : null; if (!q || !q.n) return;
+        J.unshift({ id: Date.now(), t: Math.floor(Date.now() / 1000), event: dd.event, title: dd.a.name + ' v ' + dd.b.name, side: cs.side, name: dd[cs.side].name, price: q.price, qty: q.n, fee: q.fee, cost: q.cost, read: dd.read ? dd.read.level : 'none', readTitle: dd.read ? dd.read.title : '', fair: q.fair, status: 'open', exit: null });
+        saveJ(); logB.textContent = 'Added. See the Journal tab'; calcOut(dd); setTimeout(function () { logB.textContent = 'Add this bet to my journal'; }, 2500);
+      });
+      add(box, sides, modes, f1, out, logB);
+    }
+    var sd = $('calcSide'); sd.replaceChildren();
+    ['a', 'b'].forEach(function (k) { var b = el('button', '', last(d[k].name) + ' ' + cents(d[k].ask)); b.type = 'button'; b.setAttribute('aria-pressed', String(cs.side === k)); b.addEventListener('click', function () { cs.side = k; calc(cur.d); }); sd.appendChild(b); });
+    var md = $('calcMode'); md.replaceChildren();
+    [['take', 'Take the price now'], ['rest', 'Rest an order, bid +1¢']].forEach(function (o) { var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(cs.mode === o[0])); b.addEventListener('click', function () { cs.mode = o[0]; calc(cur.d); }); md.appendChild(b); });
+    calcOut(d);
+  }
+  function pnlOf(x) { return x.status === 'won' ? x.qty - x.cost : x.status === 'lost' ? -x.cost : x.status === 'sold' ? x.qty * x.exit - takerFee(x.exit, x.qty) - x.cost : null; }
+  function renderJournal() {
+    var done = J.filter(function (x) { return x.status !== 'open'; }); var open = J.filter(function (x) { return x.status === 'open'; });
+    var net = done.reduce(function (q, x) { return q + pnlOf(x); }, 0); var wins = done.filter(function (x) { return pnlOf(x) > 0; }).length;
+    var sum = $('jSum'); sum.replaceChildren();
+    sum.appendChild(trio([['Net result', done.length ? (net >= 0 ? '+' : '') + money(net) : '–', net >= 0 ? 'up' : 'down'], ['Record', done.length ? wins + '-' + (done.length - wins) : '–'], ['Open stake', money(open.reduce(function (q, x) { return q + x.cost; }, 0))]]));
+    if (done.length) { var staked = done.reduce(function (q, x) { return q + x.cost; }, 0); sum.appendChild(el('div', 'small', 'Return on money staked: ' + (100 * net / staked).toFixed(1) + '% over ' + done.length + ' settled bets. ' + (done.length < 100 ? 'Under 100 bets this is mostly luck either way.' : ''))); }
+    var list = $('jList'); list.replaceChildren();
+    if (!J.length) list.appendChild(el('div', 'empty', 'No bets logged yet. Open a match, set your stake under Cost to act, and tap Add this bet to my journal.'));
+    J.forEach(function (x) {
+      var c = el('div', 'card'); var top = el('div', 'top'); var pl = pnlOf(x);
+      add(top, el('b', '', x.name), el('span', 'chip' + (x.status === 'open' ? '' : pl > 0 ? ' good' : ' bad'), x.status === 'open' ? 'Open' : (x.status === 'sold' ? 'Sold at ' + cents(x.exit) + ', ' : x.status === 'won' ? 'Won, ' : 'Lost, ') + (pl >= 0 ? '+' : '') + money(pl)));
+      add(c, top, el('div', 'small', x.title + ', ' + day(x.t) + ' ' + clock(x.t)), el('div', '', x.qty + ' contracts at ' + cents(x.price) + ', cost ' + money(x.cost)), el('div', 'small', 'App said: ' + (x.readTitle || 'nothing') + (has(x.fair) ? ' (model fair ' + cents(x.fair) + ')' : '')));
+      var seg = el('div', 'seg');
+      var btn = function (label, fn) { var b = el('button', '', label); b.type = 'button'; b.addEventListener('click', fn); seg.appendChild(b); };
+      if (x.status === 'open') {
+        btn('Won', function () { x.status = 'won'; saveJ(); renderJournal(); }); btn('Lost', function () { x.status = 'lost'; saveJ(); renderJournal(); });
+        var sp = el('input'); sp.type = 'number'; sp.inputMode = 'numeric'; sp.placeholder = 'sold at ¢'; sp.min = '1'; sp.max = '99'; sp.style.width = '110px'; sp.style.font = 'inherit'; sp.style.padding = '6px 8px'; sp.style.borderRadius = '8px'; sp.style.border = '1px solid var(--line)'; sp.style.background = 'var(--panel)'; sp.style.color = 'var(--ink)'; sp.setAttribute('aria-label', 'Price you sold at, in cents'); seg.appendChild(sp);
+        btn('Sold', function () { var v = parseFloat(sp.value); if (!(v >= 1 && v <= 99)) { sp.focus(); return; } x.status = 'sold'; x.exit = v / 100; saveJ(); renderJournal(); });
+      } else btn('Reopen', function () { x.status = 'open'; x.exit = null; saveJ(); renderJournal(); });
+      btn('Delete', function () { J = J.filter(function (y) { return y.id !== x.id; }); saveJ(); renderJournal(); });
+      c.appendChild(seg); list.appendChild(c);
+    });
+    var by = $('jBy'); by.replaceChildren(); var groups = {};
+    done.forEach(function (x) { var g = groups[x.read] = groups[x.read] || { n: 0, net: 0, w: 0 }; g.n++; g.net += pnlOf(x); if (pnlOf(x) > 0) g.w++; });
+    var names = { bet: 'Set-break gap', lean: 'Lean', watch: 'Small bet if stats agree', pass: 'App said no bet', none: 'No read' };
+    if (!done.length) { by.appendChild(el('div', 'small', 'Once bets are settled, this shows whether you do better when you follow the app or when you ignore it.')); return; }
+    var kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', 'Record'), el('span', 'h', 'Net'));
+    Object.keys(groups).forEach(function (k) { var g = groups[k]; add(kv, el('span', 'k', names[k] || k), el('span', 'num', g.w + '-' + (g.n - g.w)), el('span', 'num ' + (g.net >= 0 ? 'up' : 'down'), (g.net >= 0 ? '+' : '') + money(g.net))); });
+    by.appendChild(kv);
   }
 
   // ---------- big-add alerts: checked every minute on any screen ----------
@@ -787,6 +926,13 @@
     }).catch(function () { if (!al.data) $('aStatus').textContent = 'Could not check for big adds. Trying again in a minute.'; });
   }
   $('toast').addEventListener('click', function () { $('toast').hidden = true; location.hash = '#whales'; window.scrollTo(0, 0); });
+  // remember which sections are open
+  var folds = {}; try { folds = JSON.parse(localStorage.getItem('ce-folds') || '{}') || {}; } catch (e) {}
+  document.querySelectorAll('details.fold').forEach(function (dt) {
+    var k = dt.dataset.k; if (folds[k] !== undefined) dt.open = !!folds[k];
+    dt.addEventListener('toggle', function () { folds[k] = dt.open; try { localStorage.setItem('ce-folds', JSON.stringify(folds)); } catch (e) {} });
+  });
+  loadFeed();
   soundLabel(); loadAlerts();
   setInterval(function () { if (!document.hidden) loadAlerts(); }, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) loadAlerts(); });
@@ -794,8 +940,8 @@
   $('back').addEventListener('click', function () { location.hash = ''; });
   window.addEventListener('hashchange', route);
   route();
-  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales') loadList(); }, LIST_MS);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else loadList(); });
+  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales' && location.hash !== '#journal') loadList(); }, LIST_MS);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else if (location.hash !== '#journal') loadList(); if (!feed.timer) loadFeed(); });
 })();
 </script>
 </body>

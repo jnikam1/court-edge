@@ -10,9 +10,14 @@ const SYSTEM = [
   'Never invent numbers. If data is missing, say so. Plain English, no hype, no dashes as punctuation.',
 ].join(' ');
 
+// This endpoint spends the owner's money, so cap it: at most 30 write-ups an hour per server.
+const calls = [];
 module.exports = (req, res) => send(res, 45, async () => {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return { off: true };
+  const now = Date.now(); while (calls.length && now - calls[0] > 3600000) calls.shift();
+  if (calls.length >= 30) return { error: 'Too many write-ups in the last hour. Try again later.' };
+  calls.push(now);
   const event = param(req, 'event');
   if (!event) return { error: 'No match given.' };
   return cached('ai-' + event, 45000, async () => {
