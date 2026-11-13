@@ -671,7 +671,7 @@
     });
   }
   function sheetHolders(b, back) {
-    sheetLoad('Who holds this market', b.title, back, '/api/holders?cond=' + b.cond, function (box, r) {
+    sheetLoad('Who holds this market', b.title, back, '/api/wallet?cond=' + b.cond, function (box, r) {
       r.sides.forEach(function (sd) {
         add(box, el('h2', '', sd.outcome + ': ' + usd(sd.total) + ' across ' + sd.count + ' wallets'));
         var rows = el('div', 'rows');

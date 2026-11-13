@@ -1,3 +1,4 @@
-const { wallet } = require('../lib/whaleboard');
+const { wallet, holders } = require('../lib/whaleboard');
 const { send, param } = require('../lib/http');
-module.exports = (req, res) => send(res, 30, () => wallet(param(req, 'w'), param(req, 'cond')));
+// ?w=<wallet>[&cond=<market>] for one wallet, or ?cond=<market> alone for who holds that market
+module.exports = (req, res) => send(res, 30, () => { const w = param(req, 'w'); const cond = param(req, 'cond'); return w ? wallet(w, cond) : holders(cond); });

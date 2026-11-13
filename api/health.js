@@ -3,6 +3,8 @@ const { polymarket, kalshi } = require('../lib/whaleboard');
 const { scan } = require('../lib/scan');
 const { send } = require('../lib/http');
 const { form } = require('../lib/detail');
+const feed = require('../lib/feed');
+const { lastName } = require('../lib/kalshi');
 module.exports = (req, res) => send(res, 30, async () => {
   const t = Date.now();
   const part = async (fn) => { const s = Date.now(); try { return Object.assign(await fn(), { ms: Date.now() - s }); } catch (e) { return { error: String(e.message || e), ms: Date.now() - s }; } };
@@ -12,5 +14,14 @@ module.exports = (req, res) => send(res, 30, async () => {
     part(async () => { const d = await polymarket(); return { whales: d.whales.length, failed: d.whales.filter((w) => !w.ok).length, bets: d.bets.length, strongBets: d.bets.filter((b) => b.grade === 'strong').length }; }),
     part(async () => { const d = await kalshi(); return { profiles: d.profiles.length, withTrades: d.profiles.filter((x) => x.trades.length).length, withHoldings: d.profiles.filter((x) => x.holdCount).length, names: Object.keys(d.names).length }; }),
   ]);
-  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, polymarket: p, kalshi: k, form: f };
+  // tennis feed: does it cover what Kalshi lists, and does it carry server and point score?
+  const fd = await part(async () => {
+    const [x, s] = await Promise.all([feed.live(), scan()]);
+    if (x.off) return { on: false, reason: x.reason, status: x.status || null, limits: x.limits || null };
+    const inPlay = s.matches.filter((q) => q.state !== 'upcoming');
+    const find = (q) => x.matches.find((y) => (y.k1 === lastName(q.a.name) && y.k2 === lastName(q.b.name)) || (y.k1 === lastName(q.b.name) && y.k2 === lastName(q.a.name)));
+    const rows = inPlay.map((q) => { const y = find(q); return { match: lastName(q.a.name) + ' v ' + lastName(q.b.name), found: !!y, server: y ? y.server : null, points: y ? y.points : null, feedGames: y ? y.games : null, appScore: q.pm ? q.pm.sets : null }; });
+    return { on: true, ttlSeconds: x.ttl, limits: x.limits, feedLiveSingles: x.matches.length, withServer: x.matches.filter((y) => y.server).length, withPoints: x.matches.filter((y) => y.points).length, kalshiInPlay: inPlay.length, matched: rows.filter((r) => r.found).length, rows: rows.slice(0, 8), tours: [...new Set(x.matches.map((y) => y.tour))] };
+  });
+  return { asOf: new Date().toISOString(), ms: Date.now() - t, matches: m, polymarket: p, kalshi: k, form: f, feed: fd };
 });
