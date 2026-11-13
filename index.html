@@ -178,6 +178,34 @@
   .badge { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 6px; border-radius: 10px; background: var(--ball); color: #10202b; font: 600 14px/1.3 var(--body); text-align: center; vertical-align: 2px; }
   [hidden] { display: none !important; }
   .sets b.sc { width: auto; min-width: 44px; padding: 0 7px; }
+  /* bottom navigation, and the action bar that replaces it on a match */
+  main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--panel); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: var(--muted); text-decoration: none; font: 600 12.5px/1 var(--body); position: relative; border-radius: 10px; }
+  .tabbar a[aria-current="page"] { color: var(--court); }
+  .tabbar .badge { position: absolute; top: 3px; left: 50%; margin-left: 5px; }
+  .tabbar.act { grid-template-columns: 52px 1fr 1fr; gap: 8px; padding-top: 8px; }
+  .tabbar.act button { min-height: 48px; border-radius: 10px; font: 600 16px var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+  .tabbar.act button.pri { background: var(--court); border-color: var(--court); color: var(--panel); }
+  .tabbar.act button.on { color: var(--court); border-color: var(--court); }
+  .ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .ic.on { fill: currentColor; }
+  .cw { position: relative; }
+  .cw > .card .top { padding-right: 76px; min-height: 26px; }
+  .cw .acts { position: absolute; top: 5px; right: 5px; display: flex; }
+  .cw .acts button { width: 40px; height: 40px; display: grid; place-items: center; background: none; border: 0; color: var(--muted); cursor: pointer; border-radius: 9px; }
+  .cw .acts button.on { color: var(--court); }
+  .cw .acts button:active { background: var(--idle-bg); }
+  .step { display: grid; grid-template-columns: 1fr 1fr 1.5fr 1fr 1fr; gap: 6px; align-items: center; }
+  .step button { min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 16px var(--body); cursor: pointer; }
+  .step .v { text-align: center; font: 600 34px/1 var(--display); }
+  button.go.pri { background: var(--court); color: var(--panel); min-height: 48px; }
+  .prog { height: 6px; border-radius: 3px; background: var(--idle-bg); overflow: hidden; }
+  .prog i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
+  .dtabs { position: sticky; top: 0; z-index: 5; background: var(--page); padding: 8px 0; margin: -8px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .dtabs button { min-height: 42px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 15px var(--body); cursor: pointer; }
+  .dtabs button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  a.lnk { color: inherit; text-decoration: none; }
   .rows .chip { align-self: flex-start; }
   .players .name small.at { margin-left: 2px; }
   .wl { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -187,7 +215,9 @@
 </style>
 </head>
 <body>
-<div class="mast"><div class="mast-in"><div class="word"><i></i>Court Edge</div><nav class="tabs" id="tabs" aria-label="Sections"><a href="#" id="tabM">Matches</a><a href="#whales" id="tabW">Whales<span class="badge" id="aBadge" hidden></span></a><a href="#journal" id="tabJ">Journal</a></nav></div></div>
+<div class="mast"><div class="mast-in"><div class="word" style="padding-bottom:12px"><i></i>Court Edge</div></div></div>
+<nav class="tabbar" id="tabs" aria-label="Sections"><a href="#" id="tabD">Discover</a><a href="#watch" id="tabWa">Watchlist</a><a href="#positions" id="tabP">Positions</a><a href="#alerts" id="tabA">Alerts<span class="badge" id="aBadge" hidden></span></a></nav>
+<div class="tabbar act" id="actbar" hidden><button type="button" id="actSave" aria-label="Save this match"></button><button type="button" class="pri" id="actAlert">Set alert</button><button type="button" class="pri" id="actTrade">Track trade</button></div>
 <main id="listView">
   <header><div class="seg" id="tSport" role="group" aria-label="Sport" style="margin-bottom:10px"></div><div class="status" id="status">Loading Kalshi prices…</div></header>
   <section><h2>Set-break gaps</h2><div class="list" id="bets"></div></section>
@@ -221,15 +251,7 @@
 </main>
 
 <main id="whalesView" hidden>
-  <header><div class="status" id="wStatus">Loading open bets…</div></header>
-  <section>
-    <h2>Big adds in winning categories</h2>
-    <div class="small" style="margin-bottom:6px">Tested on 603 adds like these since August 1: copying each one and holding to the result returned −3.9% after fees. The whales lost 1.8% on them too. Treat an alert as a reason to look, not a signal.</div>
-    <div class="small" id="aStatus" style="margin-bottom:10px">Checking…</div>
-    <div class="seg" style="margin-bottom:10px"><button type="button" id="aSound" aria-pressed="false">Sound on new alert: off</button></div>
-    <div class="list" id="aList"></div>
-  </section>
-  <details class="fold" data-k="w-push"><summary>Alerts on this phone when the app is closed</summary><div class="card" id="pBox"></div></details>
+  <header><div class="seg" id="wSport" role="group" aria-label="Sport" style="margin-bottom:10px"></div><div class="status" id="wStatus">Loading open bets…</div></header>
   <section>
     <h2>What they hold right now</h2>
     <div class="seg" id="wFilter" role="group" aria-label="Which bets to show" style="margin-bottom:10px"></div>
@@ -243,7 +265,7 @@
       <li>Each whale is graded per category on its own full betting history, after fees. Strong means at least $50k profit, 1% return and 30 markets in that category. Weak means $50k or more lost.</li>
       <li>A bet tagged with a strong category is that whale betting where it has actually made money. A weak tag is the same whale betting where it loses.</li>
       <li>Big adds: a tracked whale bought $10k or more in the last 3 hours in a category it wins in, and now has $50k or more in that market. Buys under 5¢ or over 95¢ are left out.</li>
-      <li>The app checks for big adds every minute on any screen while it is open. For alerts with the app closed, turn on phone alerts above.</li>
+      <li>Big adds show in the Alerts tab. The app checks every minute while it is open. For alerts with the app closed, turn on phone alerts there.</li>
       <li>New marks bets opened since your last visit on this phone.</li>
       <li>Kalshi hides positions unless a trader opts in. These are the profitable ones that did.</li>
       <li>Past profit has not carried forward. Whales graded strong on their record up to August 1 then placed 603 one-sided bets of $50k or more in those categories. They won 61.2% at an average price of 60.6¢, which is break-even before fees. Many of these accounts also hedge elsewhere or make markets. Not advice.</li>
@@ -257,30 +279,51 @@
     <div class="status" id="dStatus">Loading…</div>
   </header>
   <section><div class="card" id="dHead"></div></section>
-  <section><h2>Read</h2><div id="dRead"></div></section>
-  <section><h2>Cost to act</h2><div class="card" id="dCalc"></div></section>
-  <section class="only-t"><h2>Fair value</h2><div class="card" id="dModel"></div></section>
-  <details class="fold only-g" data-k="g-inj" open><summary>Injuries that matter</summary><div class="card" id="gdInj"></div></details>
-  <details class="fold only-g" data-k="g-fair" open><summary>Prices side by side</summary><div class="card" id="gdFair"></div></details>
-  <details class="fold only-g" data-k="g-lines" open><summary>Spread and total</summary><div class="card" id="gdLines"></div></details>
-  <details class="fold only-t" data-k="hist" open><summary>What history says about this spot</summary><div class="card" id="dHist"></div></details>
-  <details class="fold" data-k="chart"><summary>Momentum</summary><div class="card" id="dChart"></div></details>
-  <details class="fold only-t" data-k="flow"><summary>Money on Kalshi</summary><div class="card" id="dFlow"></div></details>
-  <details class="fold only-t" data-k="wallets"><summary>Polymarket wallets</summary><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></details>
-  <details class="fold only-t" data-k="form"><summary>Recent form</summary><div class="card" id="dForm"><span class="small">Loading results…</span></div></details>
-  <details class="fold only-t" data-k="h2h"><summary>Head to head</summary><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></details>
-  <details class="fold only-t" data-k="stats"><summary>Player patterns and ratings</summary><div class="card" id="dStats"></div></details>
-  <details class="fold only-t" data-k="ai"><summary>Written analysis</summary><div class="card" id="dAi"></div></details>
-  <details class="fold only-g" data-k="g-str"><summary>Offence against defence</summary><div class="card" id="gdStr"></div></details>
-  <details class="fold only-g" data-k="g-form"><summary>Last five and rest</summary><div class="card" id="gdForm"></div></details>
-  <details class="fold only-g" data-k="g-wal"><summary>Polymarket wallets</summary><div class="card" id="gdWal"></div></details>
+  <section><div class="card" id="dChart"></div></section>
+  <div class="dtabs" id="dTabs" role="group" aria-label="Match sections"></div>
+  <section data-tab="overview"><h2>Read</h2><div id="dRead"></div></section>
+  <section data-tab="overview"><h2>Cost to act</h2><div class="card" id="dCalc"></div></section>
+  <details class="fold only-g" data-tab="overview" data-k="g-inj" open><summary>Injuries that matter</summary><div class="card" id="gdInj"></div></details>
+  <details class="fold only-t" data-tab="overview" data-k="hist" open><summary>What history says about this spot</summary><div class="card" id="dHist"></div></details>
+  <section class="only-t" data-tab="scenarios"><h2>Fair value and what moves it</h2><div class="card" id="dModel"></div></section>
+  <details class="fold only-g" data-tab="scenarios" data-k="g-fair" open><summary>Prices side by side</summary><div class="card" id="gdFair"></div></details>
+  <details class="fold only-g" data-tab="scenarios" data-k="g-lines" open><summary>Spread and total</summary><div class="card" id="gdLines"></div></details>
+  <details class="fold only-g" data-tab="scenarios" data-k="g-str" open><summary>Offence against defence</summary><div class="card" id="gdStr"></div></details>
+  <details class="fold only-t" data-tab="scenarios" data-k="stats" open><summary>Player patterns and ratings</summary><div class="card" id="dStats"></div></details>
+  <details class="fold only-t" data-tab="activity" data-k="flow" open><summary>Money on Kalshi</summary><div class="card" id="dFlow"></div></details>
+  <details class="fold only-t" data-tab="activity" data-k="wallets" open><summary>Polymarket wallets</summary><div class="card" id="dWhales"><span class="small">Loading wallets…</span></div></details>
+  <details class="fold only-t" data-tab="activity" data-k="form"><summary>Recent form</summary><div class="card" id="dForm"><span class="small">Loading results…</span></div></details>
+  <details class="fold only-t" data-tab="activity" data-k="h2h"><summary>Head to head</summary><div class="card" id="dH2h"><span class="small">Loading meetings…</span></div></details>
+  <details class="fold only-t" data-tab="activity" data-k="ai"><summary>Written analysis</summary><div class="card" id="dAi"></div></details>
+  <details class="fold only-g" data-tab="activity" data-k="g-form" open><summary>Last five and rest</summary><div class="card" id="gdForm"></div></details>
+  <details class="fold only-g" data-tab="activity" data-k="g-wal" open><summary>Polymarket wallets</summary><div class="card" id="gdWal"></div></details>
 </main>
 
-<main id="journalView" hidden>
-  <header><div class="status">Your own bets, kept on this phone only. Add one from the Cost to act box on any match.</div></header>
+<main id="watchView" hidden>
+  <header><div class="status" id="waStatus">Matches you saved with the bookmark.</div></header>
+  <section><div class="list" id="waList"></div></section>
+</main>
+
+<main id="positionsView" hidden>
+  <header><div class="status">Your own trades, kept on this phone only. Add one with Track trade on any match.</div></header>
+  <section><h2>Open</h2><div class="list" id="pOpen"></div></section>
   <section><div class="card" id="jSum"></div></section>
-  <section><h2>Bets</h2><div class="list" id="jList"></div></section>
+  <section><h2>Closed</h2><div class="list" id="jList"></div></section>
   <section><h2>By what the app said at entry</h2><div class="card" id="jBy"></div></section>
+</main>
+
+<main id="alertsView" hidden>
+  <header><div class="status">Price targets you set, big whale adds and key injury changes.</div></header>
+  <section><h2>Your price alerts</h2><div class="list" id="rList"></div></section>
+  <details class="fold" data-k="w-push" open><summary>Alerts on this phone when the app is closed</summary><div class="card" id="pBox"></div></details>
+  <section>
+    <h2>Big whale adds</h2>
+    <div class="small" style="margin-bottom:6px">Tested on 603 adds like these since August 1: copying each one and holding to the result returned −3.9% after fees. Treat one as a reason to look, not a signal.</div>
+    <div class="small" id="aStatus" style="margin-bottom:10px">Checking…</div>
+    <div class="seg" style="margin-bottom:10px"><button type="button" id="aSound" aria-pressed="false">Sound on new alert: off</button></div>
+    <div class="list" id="aList"></div>
+  </section>
+  <section><h2>Injury changes</h2><div class="card" id="iList"><span class="small">Loading…</span></div></section>
 </main>
 
 <button class="toast" id="toast" type="button" hidden></button>
@@ -369,7 +412,7 @@
     var top = el('div', 'top');
     add(top, el('span', 'tour', (m.tournament || m.tourLabel || m.tour)), el('span', 'chip' + (m.inWindow ? ' window' : m.state !== 'upcoming' ? ' live' : ''), stateText(m)));
     add(c, top, playersGrid(m, m.pm && m.pm.live ? m.pm.sets : null, true), listVerdict(m));
-    return c;
+    return wrapCard(c, m);
   }
   function fill(id, items, emptyText) {
     var box = $(id); box.replaceChildren();
@@ -391,13 +434,174 @@
     get('/api/scan').then(renderList).catch(function (e) { $('status').replaceChildren(el('span', 'err', 'Could not reach Kalshi just now (' + e.message + '). Retrying.')); });
   }
 
+  // ---------- icons, saved matches, price alerts ----------
+  var ICONS = {
+    discover: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>', watch: '<path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/>',
+    positions: '<path d="M3 20h18M6 20v-7M11 20V6M16 20v-10M21 20v-4"/>', alerts: '<path d="M6 16.5V11a6 6 0 0112 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 004 0"/>'
+  };
+  function icon(name, filled) { var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('class', 'ic' + (filled ? ' on' : '')); s.innerHTML = ICONS[name]; return s; }
+  var store = function (k, def) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v === null || typeof v !== typeof def ? def : v; } catch (e) { return def; } };
+  var keep = function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  var nowS = function () { return Math.floor(Date.now() / 1000); };
+  var titleOf = function (m) { return m.a.name + ' v ' + m.b.name; };
+
+  var W = store('ce-watch', {});                       // saved matches: event -> { t, title }
+  var R = store('ce-rules', []); if (!Array.isArray(R)) R = [];   // price alerts
+  var mine = 0;                                        // price alerts that fired and have not been looked at
+  function toggleWatch(ev, title) { if (W[ev]) delete W[ev]; else W[ev] = { t: nowS(), title: title }; keep('ce-watch', W); }
+  var openRules = function (ev) { return R.filter(function (r) { return !r.fired && (!ev || r.event === ev); }); };
+  var ruleText = function (r) { return r.name + (r.op === 'bid>=' ? ' bid reaches ' : ' ask drops to ') + cents(r.price); };
+  var defTarget = function (p) { return p < 0.7 ? 0.8 : Math.min(0.99, Math.round((p + 0.1) * 100) / 100); }; // 80¢, or ten cents up when already past 70¢
+
+  function say(title, body, go) { // the banner at the top of the screen
+    var t = $('toast'); t.replaceChildren(); add(t, el('b', '', title), body ? el('span', '', body) : null); t.dataset.go = go || ''; t.hidden = false;
+    clearTimeout(al.hide); al.hide = setTimeout(function () { t.hidden = true; }, go ? 15000 : 4000);
+  }
+  // This phone's push subscription, or null when phone alerts are off.
+  function withSub(fn) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !pu.url) { fn(null); return; }
+    navigator.serviceWorker.getRegistration().then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; }).then(fn).catch(function () { fn(null); });
+  }
+  function sendRule(r) { withSub(function (sub) { if (!sub) return; lg('/rules', { endpoint: sub.endpoint, id: r.id, ticker: r.ticker, title: ruleText(r), op: r.op, price: r.price, url: '/#m=' + encodeURIComponent(r.event) }).then(function () { r.remote = true; keep('ce-rules', R); if (location.hash === '#alerts') renderRules(); }).catch(function () {}); }); }
+  function addRuleRaw(o) {
+    var r = { id: 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), event: o.event, ticker: o.ticker, side: o.side, name: o.name, title: o.title, op: o.op, price: o.price, created: nowS(), fired: null, remote: false };
+    R.unshift(r); R = R.slice(0, 60); keep('ce-rules', R); sendRule(r); return r;
+  }
+  function addRule(m, side, op, price) { return addRuleRaw({ event: m.event, ticker: m[side].ticker, side: side, name: last(m[side].name), title: titleOf(m), op: op, price: price }); }
+  function dropRule(id) {
+    var r = R.filter(function (x) { return x.id === id; })[0]; R = R.filter(function (x) { return x.id !== id; }); keep('ce-rules', R);
+    if (r && r.remote) withSub(function (sub) { if (sub) lg('/rules/delete', { endpoint: sub.endpoint, id: id }).catch(function () {}); });
+  }
+  // Current prices for a set of events, from the same lists the Discover tab uses.
+  var Q = { t: 0, by: {} };
+  function quotes(events) {
+    var need = { t: false, nba: false, nfl: false }; events.forEach(function (e) { var l = leagueOf(e); if (l) need[l] = true; else need.t = true; });
+    var calls = [];
+    if (need.t) calls.push(get('/api/scan').then(function (d) { (d.matches || []).forEach(function (m) { Q.by[m.event] = m; }); }).catch(function () {}));
+    ['nba', 'nfl'].forEach(function (l) { if (need[l]) calls.push(get('/api/sports?league=' + l).then(function (d) { (d.games || []).forEach(function (m) { Q.by[m.event] = m; }); }).catch(function () {})); });
+    return Promise.all(calls).then(function () { Q.t = Date.now(); return Q.by; });
+  }
+  // While the app is open, check price alerts here too, so the banner shows without waiting for the logger's minute.
+  function checkRules() {
+    var open = openRules(); if (!open.length || document.hidden) return;
+    quotes(open.map(function (r) { return r.event; })).then(function (by) {
+      var hit = [];
+      open.forEach(function (r) { var m = by[r.event]; var s = m && m[r.side]; if (!s) return; if (r.op === 'bid>=' ? has(s.bid) && s.bid >= r.price - 1e-9 : has(s.ask) && s.ask > 0 && s.ask <= r.price + 1e-9) { r.fired = nowS(); r.at = r.op === 'bid>=' ? s.bid : s.ask; hit.push(r); } });
+      if (!hit.length) return;
+      keep('ce-rules', R); mine += hit.length; badge(); if (al.sound) beep();
+      say(ruleText(hit[0]), hit[0].title + (hit.length > 1 ? ', and ' + (hit.length - 1) + ' more' : '') + '. Tap to open.', hit.length > 1 ? '#alerts' : '#m=' + encodeURIComponent(hit[0].event));
+      if (location.hash === '#alerts') renderRules();
+    });
+  }
+  // The logger may have fired an alert while the app was closed.
+  function pullRules() {
+    withSub(function (sub) {
+      if (!sub) return;
+      lg('/rules/list', { endpoint: sub.endpoint }).then(function (d) {
+        var by = {}; (d.rules || []).forEach(function (x) { by[x.id] = x; }); var ch = false;
+        R.forEach(function (r) { var x = by[r.id]; if (!x) { if (!r.fired && !r.remote) sendRule(r); return; } r.remote = true; if (x.fired && !r.fired) { r.fired = x.fired > 0 ? x.fired : nowS(); r.gone = x.fired < 0; ch = true; } });
+        if (ch) { keep('ce-rules', R); renderRules(); }
+      }).catch(function () {});
+    });
+  }
+  function renderRules() {
+    var box = $('rList'); box.replaceChildren(); var open = openRules(); var fired = R.filter(function (r) { return r.fired; }).slice(0, 12);
+    if (!R.length) { box.appendChild(el('div', 'empty', 'No price alerts yet. Tap the bell on any match, pick a side and a price, and you are told when it gets there.')); return; }
+    var one = function (r) {
+      var c = el('div', 'card'); var top = el('div', 'top'); var a = el('a', 'lnk'); a.href = '#m=' + encodeURIComponent(r.event); a.appendChild(el('b', '', ruleText(r)));
+      add(top, a, el('span', 'chip' + (r.fired ? (r.gone ? '' : ' good') : ''), r.fired ? (r.gone ? 'Market closed first' : 'Reached ' + ago(r.fired)) : r.remote ? 'On, sent to this phone' : 'On while the app is open'));
+      add(c, top, el('div', 'small', r.title + ' · set ' + ago(r.created)));
+      var seg = el('div', 'seg'); var b = el('button', '', 'Remove'); b.type = 'button'; b.addEventListener('click', function () { dropRule(r.id); renderRules(); }); seg.appendChild(b);
+      if (r.fired && !r.gone) { var again = el('button', '', 'Set again'); again.type = 'button'; again.addEventListener('click', function () { r.fired = null; r.created = nowS(); r.remote = false; keep('ce-rules', R); sendRule(r); renderRules(); }); seg.appendChild(again); }
+      c.appendChild(seg); return c;
+    };
+    open.forEach(function (r) { box.appendChild(one(r)); }); fired.forEach(function (r) { box.appendChild(one(r)); });
+    if (open.some(function (r) { return !r.remote; })) box.appendChild(el('div', 'small', 'Alerts marked "while the app is open" need phone alerts turned on below to reach you with the app closed.'));
+    box.appendChild(el('div', 'small', 'Prices are checked about once a minute, so a price that touches your level for a few seconds can be missed.'));
+  }
+  // Bottom sheet: side, type, price, create. Opens with a sensible default so it is two taps.
+  function alertSheet(m) {
+    var pos = J.filter(function (x) { return x.status === 'open' && x.event === m.event; })[0];
+    var st = { side: 'a', op: 'bid>=', price: 0.8 };
+    if (pos) { st.side = pos.side; st.price = pos.target || defTarget(pos.price); }
+    else {
+      var a = has(m.a.bid) ? m.a.bid : 0, b = has(m.b.bid) ? m.b.bid : 0; var lead = a >= b ? 'a' : 'b'; var hi = Math.max(a, b);
+      if (hi < 0.78) { st.side = lead; st.price = 0.8; }                                   // the usual case: the side in front, at 80¢
+      else if (hi < 0.94) { st.side = lead; st.price = Math.min(0.97, Math.round((hi + 0.05) * 100) / 100); } // already past 80¢: a little higher
+      else { st.side = lead; st.op = 'ask<='; st.price = Math.max(0.5, Math.round((hi - 0.1) * 100) / 100); }   // nearly over: only a pullback is worth an alert
+    }
+    var draw = function () {
+      var box = sheetShell('Set a price alert', titleOf(m));
+      var sides = el('div', 'seg'); ['a', 'b'].forEach(function (k) { var x = el('button', '', last(m[k].name) + ' ' + cents(m[k].bid) + ' / ' + cents(m[k].ask)); x.type = 'button'; x.setAttribute('aria-pressed', String(st.side === k)); x.addEventListener('click', function () { st.side = k; draw(); }); sides.appendChild(x); });
+      var ops = el('div', 'seg'); [['bid>=', 'Sell price reaches'], ['ask<=', 'Buy price drops to']].forEach(function (o) { var x = el('button', '', o[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(st.op === o[0])); x.addEventListener('click', function () { if (st.op !== o[0]) { st.op = o[0]; var s = m[st.side]; st.price = o[0] === 'ask<=' ? Math.max(0.03, Math.round(((has(s.ask) ? s.ask : 0.5) - 0.05) * 100) / 100) : defTarget(has(s.bid) ? s.bid : 0.5); } draw(); }); ops.appendChild(x); });
+      var step = el('div', 'step'); var bump = function (d) { var x = el('button', '', (d > 0 ? '+' : '−') + Math.abs(d)); x.type = 'button'; x.setAttribute('aria-label', (d > 0 ? 'Raise' : 'Lower') + ' by ' + Math.abs(d) + ' cents'); x.addEventListener('click', function () { st.price = Math.min(0.99, Math.max(0.01, Math.round((st.price + d / 100) * 100) / 100)); draw(); }); return x; };
+      add(step, bump(-5), bump(-1), el('div', 'v', cents(st.price)), bump(1), bump(5));
+      var go = el('button', 'go pri', 'Create alert'); go.type = 'button';
+      go.addEventListener('click', function () { var r = addRule(m, st.side, st.op, st.price); closeSheet(); say('Alert set', ruleText(r) + '.'); refreshMarks(); });
+      var s = m[st.side]; var away = st.op === 'bid>=' ? (has(s.bid) ? st.price - s.bid : null) : (has(s.ask) ? s.ask - st.price : null);
+      add(box, sides, ops, step, el('div', 'small', (has(away) ? (away > 0 ? Math.round(away * 100) + '¢ away right now. ' : 'Already there, so this fires on the next check. ') : '') + (pu.on ? 'Sent to this phone even with the app closed, checked about once a minute.' : 'Shows while the app is open. Turn on phone alerts in the Alerts tab to get it with the app closed.')), go);
+      var ex = openRules(m.event); if (ex.length) { var rows = el('div', 'rows'); ex.forEach(function (r) { var row = el('div'); var rm = el('button', 'go', 'Remove'); rm.type = 'button'; rm.addEventListener('click', function () { dropRule(r.id); refreshMarks(); draw(); }); add(row, el('span', 'l', ruleText(r)), rm); rows.appendChild(row); }); add(box, el('div', 'sub', 'Already set'), rows); }
+    };
+    draw(); openSheetNow();
+  }
+  // Bottom sheet: record a trade in two taps.
+  function tradeSheet(d) {
+    var side = d.read && d.read.side ? d.read.side : cs.side || 'a'; var st = { side: side, price: null, qty: null, alert: true };
+    var fill = function () { var p = d[st.side].ask; st.price = has(p) ? Math.min(0.99, Math.max(0.01, p)) : 0.5; st.qty = Math.max(1, Math.floor((cs.stake || 100) / st.price)); st.target = defTarget(st.price); }; fill();
+    var draw = function () {
+      var box = sheetShell('Track a trade', titleOf(d));
+      var sides = el('div', 'seg'); ['a', 'b'].forEach(function (k) { var x = el('button', '', last(d[k].name) + ' ' + cents(d[k].ask)); x.type = 'button'; x.setAttribute('aria-pressed', String(st.side === k)); x.addEventListener('click', function () { st.side = k; fill(); draw(); }); sides.appendChild(x); });
+      var num = function (label, val, set, min, max) { var f = el('label', 'field', label); var i = el('input'); i.type = 'number'; i.inputMode = 'numeric'; i.min = String(min); i.max = String(max); i.value = String(val); i.addEventListener('input', function () { var v = parseFloat(i.value); if (v >= min && v <= max) set(v); }); f.appendChild(i); return f; };
+      var grid = el('div'); grid.style.display = 'grid'; grid.style.gridTemplateColumns = '1fr 1fr 1fr'; grid.style.gap = '8px';
+      add(grid, num('Price paid, ¢', Math.round(st.price * 100), function (v) { st.price = v / 100; }, 1, 99), num('Contracts', st.qty, function (v) { st.qty = Math.floor(v); }, 1, 1000000), num('Target, ¢', Math.round(st.target * 100), function (v) { st.target = v / 100; }, 2, 99));
+      var al2 = el('div', 'seg'); var tg = el('button', '', 'Alert me when the sell price reaches the target'); tg.type = 'button'; tg.setAttribute('aria-pressed', String(st.alert)); tg.addEventListener('click', function () { st.alert = !st.alert; tg.setAttribute('aria-pressed', String(st.alert)); }); al2.appendChild(tg);
+      var go = el('button', 'go pri', 'Save trade'); go.type = 'button';
+      go.addEventListener('click', function () {
+        var fee = takerFee(st.price, st.qty); var x = { id: Date.now(), t: nowS(), event: d.event, ticker: d[st.side].ticker, title: titleOf(d), side: st.side, name: d[st.side].name, price: st.price, qty: st.qty, fee: fee, cost: st.qty * st.price + fee, target: st.target, read: d.read ? d.read.level : 'none', readTitle: d.read ? d.read.title : '', fair: d.model && d.model.live ? (st.side === 'a' ? d.model.live.a : 1 - d.model.live.a) : null, status: 'open', exit: null };
+        J.unshift(x); saveJ(); if (st.alert && st.target > st.price) addRule(d, st.side, 'bid>=', st.target);
+        closeSheet(); say('Trade tracked', last(x.name) + ' ' + x.qty + ' at ' + cents(x.price) + (st.alert ? ', alert at ' + cents(st.target) : '') + '. See Positions.'); refreshMarks(); if (cur.d) calcOut(cur.d);
+      });
+      add(box, sides, grid, al2, go, el('div', 'small', 'This only records the trade here. It does not place an order on Kalshi.'));
+    };
+    draw(); openSheetNow();
+  }
+  function openSheetNow() { var sh = $('sheet'); $('scrim').hidden = false; sh.hidden = false; requestAnimationFrame(function () { sh.classList.add('on'); }); }
+  // bookmark and bell on every card
+  function wrapCard(c, m) {
+    var w = el('div', 'cw'); var acts = el('div', 'acts'); var t = titleOf(m);
+    var s = el('button'); s.type = 'button'; var b = el('button'); b.type = 'button';
+    var paint = function () { var on = !!W[m.event]; s.replaceChildren(icon('watch', on)); s.className = on ? 'on' : ''; s.setAttribute('aria-pressed', String(on)); s.setAttribute('aria-label', (on ? 'Remove from watchlist: ' : 'Save to watchlist: ') + t); var n = openRules(m.event).length; b.replaceChildren(icon('alerts', n > 0)); b.className = n ? 'on' : ''; b.setAttribute('aria-label', 'Set a price alert: ' + t); };
+    s.addEventListener('click', function () { toggleWatch(m.event, t); paint(); if (location.hash === '#watch') loadWatch(); });
+    b.addEventListener('click', function () { alertSheet(m); });
+    w.dataset.ev = m.event; w.paint = paint; paint(); add(acts, s, b); add(w, c, acts); return w;
+  }
+  function refreshMarks() { document.querySelectorAll('.cw').forEach(function (w) { if (w.paint) w.paint(); }); paintSave(); }
+  function paintSave() { var b = $('actSave'); var on = !!(cur.event && W[cur.event]); b.replaceChildren(icon('watch', on)); b.className = on ? 'on' : ''; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-label', on ? 'Remove from watchlist' : 'Save to watchlist'); }
+
+  // ---------- watchlist ----------
+  function loadWatch() {
+    var evs = Object.keys(W); var box = $('waList');
+    if (!evs.length) { box.replaceChildren(el('div', 'empty', 'Nothing saved yet. Tap the bookmark on any match in Discover and it stays here until you remove it.')); $('waStatus').textContent = 'Matches you saved with the bookmark.'; return; }
+    quotes(evs).then(function (by) {
+      if (location.hash !== '#watch') return; box.replaceChildren();
+      var rank = function (e) { var m = by[e]; return !m ? 3 : m.state === 'upcoming' ? 2 : m.state === 'closing' ? 2.5 : 1; };
+      evs.sort(function (x, y) { return rank(x) - rank(y) || ((by[x] && by[x].start) || 0) - ((by[y] && by[y].start) || 0); });
+      evs.forEach(function (e) {
+        var m = by[e]; if (m) { box.appendChild(leagueOf(e) ? gameCard(m) : card(m)); return; }
+        var c = el('div', 'card'); var top = el('div', 'top'); var rm = el('button', 'go', 'Remove'); rm.type = 'button'; rm.addEventListener('click', function () { toggleWatch(e, ''); loadWatch(); });
+        add(top, el('b', '', W[e].title || e), rm); add(c, top, el('div', 'small', 'Finished, or no longer listed on Kalshi.')); box.appendChild(c);
+      });
+      var s = $('waStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date().toLocaleTimeString()), document.createTextNode(' · ' + evs.length + ' saved · refreshes every 15s'));
+    });
+  }
+
   // ---------- NBA and NFL ----------
   var gm = { league: null, data: null };
   var leagueOf = function (ev) { return /^KXNBA/.test(ev) ? 'nba' : /^KXNFL/.test(ev) ? 'nfl' : null; };
-  function rememberSport(sp) { try { localStorage.setItem('ce-sport', sp); } catch (e) {} $('tabM').setAttribute('href', sp ? '#' + sp : '#'); }
+  function rememberSport(sp) { try { localStorage.setItem('ce-sport', sp); } catch (e) {} $('tabD').setAttribute('href', sp ? '#' + sp : '#'); }
   function sportSeg(id, active) {
     var box = $(id); box.replaceChildren();
-    [['', 'Tennis'], ['nba', 'NBA'], ['nfl', 'NFL']].forEach(function (o) {
+    [['', 'Tennis'], ['nba', 'NBA'], ['nfl', 'NFL'], ['whales', 'Whales']].forEach(function (o) {
       var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(active === o[0]));
       b.addEventListener('click', function () { if (active !== o[0]) location.hash = o[0] ? '#' + o[0] : ''; }); box.appendChild(b);
     });
@@ -429,7 +633,7 @@
     if (gap) { var v = el('div', 'verdict bet'); add(v, el('b', 't', 'Gap: ' + m[m.gap.side].name + ' at ' + cents(m.gap.ask)), el('span', 'why', m.book.name + ' fair ' + cents(m.gap.fair) + '. ' + c1(m.gap.edge) + ' after the fee.')); c.appendChild(v); }
     else if (m.book && has(m.book.a)) c.appendChild(el('div', 'small', m.book.name + ' fair: ' + m.a.name + ' ' + cents(m.book.a) + ', ' + m.b.name + ' ' + cents(m.book.b) + (m.book.text ? ' · ' + m.book.text : '') + (has(m.book.total) ? ' · total ' + m.book.total : '')));
     else if (m.state === 'live' && m.sit && m.sit.text) c.appendChild(el('div', 'small', m.sit.text));
-    return c;
+    return wrapCard(c, m);
   }
   function ago2(t) { var s = Math.max(0, Math.floor(Date.now() / 1000) - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; }
   function renderGames(d) {
@@ -587,7 +791,7 @@
   function openGame(lg, ev) {
     cur.timers.forEach(clearInterval);
     cur = { event: ev, kind: 'game', league: lg, srv: null, d: null, timers: [], aiText: null, pmCond: undefined };
-    show('detailView'); detailKind(true); $('back').textContent = '‹ All ' + lg.toUpperCase() + ' games'; window.scrollTo(0, 0);
+    show('detailView'); detailKind(true); $('back').textContent = '‹ Back'; window.scrollTo(0, 0);
     DETAIL_BOXES.forEach(function (id) { $(id).replaceChildren(); });
     $('gdWal').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dStatus').textContent = 'Loading…';
     loadGame();
@@ -1032,14 +1236,23 @@
   }
 
   var DETAIL_BOXES = ['dHead', 'dRead', 'dCalc', 'dModel', 'dHist', 'dChart', 'dFlow', 'dStats', 'gdInj', 'gdFair', 'gdLines', 'gdStr', 'gdForm', 'gdWal'];
+  var dtab = 'overview'; try { dtab = localStorage.getItem('ce-dtab') || 'overview'; } catch (e) {}
+  // Which sections show: the ones for this kind of match that belong to the chosen tab.
   function detailKind(game) {
-    document.querySelectorAll('.only-t').forEach(function (e) { e.hidden = game; });
-    document.querySelectorAll('.only-g').forEach(function (e) { e.hidden = !game; });
+    if (['overview', 'scenarios', 'activity'].indexOf(dtab) < 0) dtab = 'overview';
+    document.querySelectorAll('#detailView [data-tab]').forEach(function (e) { e.hidden = e.dataset.tab !== dtab || (game ? e.classList.contains('only-t') : e.classList.contains('only-g')); });
+    var box = $('dTabs'); box.replaceChildren();
+    [['overview', 'Overview'], ['scenarios', 'Scenarios'], ['activity', 'Activity']].forEach(function (o) {
+      var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(dtab === o[0]));
+      b.addEventListener('click', function () { dtab = o[0]; try { localStorage.setItem('ce-dtab', dtab); } catch (e) {} detailKind(cur.kind === 'game'); });
+      box.appendChild(b);
+    });
+    paintSave();
   }
   function openDetail(ev) {
     cur.timers.forEach(clearInterval);
     cur = { event: ev, srv: null, d: null, timers: [], aiText: null };
-    show('detailView'); detailKind(false); $('back').textContent = '‹ All matches'; window.scrollTo(0, 0);
+    show('detailView'); detailKind(false); $('back').textContent = '‹ Back'; window.scrollTo(0, 0);
     DETAIL_BOXES.forEach(function (id) { $(id).replaceChildren(); });
     $('dWhales').replaceChildren(el('span', 'small', 'Loading wallets…')); $('dForm').replaceChildren(el('span', 'small', 'Loading results…')); $('dH2h').replaceChildren(el('span', 'small', 'Loading meetings…'));
     $('dStatus').textContent = 'Loading…'; ai();
@@ -1048,20 +1261,30 @@
     cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
   }
   function show(view) {
-    ['listView', 'gamesView', 'detailView', 'whalesView', 'journalView'].forEach(function (id) { $(id).hidden = id !== view; });
-    $('tabs').hidden = view === 'detailView';
-    [['tabM', 'listView'], ['tabW', 'whalesView'], ['tabJ', 'journalView']].forEach(function (t) { if (t[1] === view || (t[0] === 'tabM' && view === 'gamesView')) $(t[0]).setAttribute('aria-current', 'page'); else $(t[0]).removeAttribute('aria-current'); });
+    ['listView', 'gamesView', 'detailView', 'whalesView', 'watchView', 'positionsView', 'alertsView'].forEach(function (id) { $(id).hidden = id !== view; });
+    $('tabs').hidden = view === 'detailView'; $('actbar').hidden = view !== 'detailView';
+    var tab = { listView: 'tabD', gamesView: 'tabD', whalesView: 'tabD', watchView: 'tabWa', positionsView: 'tabP', alertsView: 'tabA' }[view];
+    ['tabD', 'tabWa', 'tabP', 'tabA'].forEach(function (id) { if (id === tab) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current'); });
   }
+  var place = {}; var lastList = ''; var prevHash;
+  var backTo = function (h) { var y = place[h] || 0; requestAnimationFrame(function () { window.scrollTo(0, y); }); }; // return to where the list was left
   function route() {
     wb.timers.forEach(clearInterval); wb.timers = [];
+    var h = location.hash === '#' ? '' : location.hash;
+    if (h === '#journal') { location.replace('#positions'); return; }
+    if (prevHash !== undefined && !/^#m=/.test(prevHash)) place[prevHash] = window.scrollY;
+    prevHash = h;
     var m = /^#m=(.+)$/.exec(location.hash);
+    if (!m) lastList = h;
     if (m) { var ev = decodeURIComponent(m[1]); var league = leagueOf(ev); if (league) openGame(league, ev); else openDetail(ev); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
     var sp = location.hash === '#nba' ? 'nba' : location.hash === '#nfl' ? 'nfl' : null;
-    if (sp) { rememberSport(sp); show('gamesView'); sportSeg('gSport', sp); if (gm.league !== sp) { gm.league = sp; gm.data = null; ['gGaps', 'gLive', 'gUp', 'gInj'].forEach(function (id) { $(id).replaceChildren(); }); $('gStatus').textContent = 'Loading Kalshi prices…'; } loadGames(); badge(); return; }
-    if (location.hash === '#whales') { show('whalesView'); openWhales(); renderAlerts(); badge(); loadLogger(); setTimeout(function () { al.fresh = {}; }, 60000); return; }
-    if (location.hash === '#journal') { show('journalView'); renderJournal(); badge(); return; }
-    rememberSport(''); show('listView'); sportSeg('tSport', ''); loadList(); badge();
+    if (sp) { rememberSport(sp); show('gamesView'); sportSeg('gSport', sp); if (gm.league !== sp) { gm.league = sp; gm.data = null; ['gGaps', 'gLive', 'gUp', 'gInj'].forEach(function (id) { $(id).replaceChildren(); }); $('gStatus').textContent = 'Loading Kalshi prices…'; } loadGames(); badge(); backTo(h); return; }
+    if (h === '#whales') { rememberSport('whales'); show('whalesView'); sportSeg('wSport', 'whales'); openWhales(); badge(); backTo(h); return; }
+    if (h === '#alerts') { show('alertsView'); mine = 0; renderRules(); renderAlerts(); badge(); loadLogger(); pullRules(); loadInjuries(); setTimeout(function () { al.fresh = {}; }, 60000); backTo(h); return; }
+    if (h === '#watch') { show('watchView'); loadWatch(); badge(); backTo(h); return; }
+    if (h === '#positions') { show('positionsView'); renderJournal(); badge(); backTo(h); return; }
+    rememberSport(''); show('listView'); sportSeg('tSport', ''); loadList(); badge(); backTo(h);
   }
 
 
@@ -1107,11 +1330,11 @@
       var f1 = el('label', 'field', 'Stake in dollars'); var inp = el('input'); inp.type = 'number'; inp.inputMode = 'decimal'; inp.min = '1'; inp.step = '1'; inp.value = String(cs.stake); f1.appendChild(inp);
       inp.addEventListener('input', function () { cs.stake = Math.max(0, parseFloat(inp.value) || 0); try { localStorage.setItem('ce-stake', String(cs.stake)); } catch (e) {} if (cur.d) calcOut(cur.d); });
       var out = el('div'); out.id = 'calcOut'; out.style.display = 'flex'; out.style.flexDirection = 'column'; out.style.gap = '8px';
-      var logB = el('button', 'go', 'Add this bet to my journal'); logB.type = 'button';
+      var logB = el('button', 'go', 'Track this trade'); logB.type = 'button';
       logB.addEventListener('click', function () {
         var dd = cur.d; var q = dd ? quote(dd) : null; if (!q || !q.n) return;
-        J.unshift({ id: Date.now(), t: Math.floor(Date.now() / 1000), event: dd.event, title: dd.a.name + ' v ' + dd.b.name, side: cs.side, name: dd[cs.side].name, price: q.price, qty: q.n, fee: q.fee, cost: q.cost, read: dd.read ? dd.read.level : 'none', readTitle: dd.read ? dd.read.title : '', fair: q.fair, status: 'open', exit: null });
-        saveJ(); logB.textContent = 'Added. See the Journal tab'; calcOut(dd); setTimeout(function () { logB.textContent = 'Add this bet to my journal'; }, 2500);
+        J.unshift({ id: Date.now(), t: Math.floor(Date.now() / 1000), event: dd.event, ticker: dd[cs.side].ticker, target: defTarget(q.price), title: dd.a.name + ' v ' + dd.b.name, side: cs.side, name: dd[cs.side].name, price: q.price, qty: q.n, fee: q.fee, cost: q.cost, read: dd.read ? dd.read.level : 'none', readTitle: dd.read ? dd.read.title : '', fair: q.fair, status: 'open', exit: null });
+        saveJ(); logB.textContent = 'Tracked. See Positions'; calcOut(dd); setTimeout(function () { logB.textContent = 'Track this trade'; }, 2500);
       });
       add(box, sides, modes, f1, out, logB);
     }
@@ -1122,32 +1345,62 @@
     calcOut(d);
   }
   function pnlOf(x) { return x.status === 'won' ? x.qty - x.cost : x.status === 'lost' ? -x.cost : x.status === 'sold' ? x.qty * x.exit - takerFee(x.exit, x.qty) - x.cost : null; }
-  function renderJournal() {
+  // One open trade, built around getting out: entry, what it sells for now, the gain, and the target.
+  function posCard(x) {
+    var m = Q.by[x.event]; var sd = m && m[x.side]; var bid = sd && has(sd.bid) ? sd.bid : null; var tgt = x.target || defTarget(x.price);
+    var pl = has(bid) ? x.qty * bid - takerFee(bid, x.qty) - x.cost : null; var atT = x.qty * tgt - takerFee(tgt, x.qty) - x.cost;
+    var rule = R.filter(function (r) { return !r.fired && r.event === x.event && r.side === x.side && r.op === 'bid>='; })[0];
+    var c = el('div', 'card'); var top = el('div', 'top'); var a = el('a', 'lnk'); a.href = '#m=' + encodeURIComponent(x.event); a.appendChild(el('b', '', x.name));
+    add(top, a, el('span', 'chip' + (m && m.state !== 'upcoming' ? ' live' : ''), !m ? 'Not listed now' : m.state === 'upcoming' ? 'Not started' : m.state === 'closing' ? 'Settling' : 'In play'));
+    add(c, top, el('div', 'small', x.title + ' · ' + x.qty + ' contracts · ' + day(x.t) + ' ' + clock(x.t)));
+    c.appendChild(trio([['Entry', cents(x.price)], ['Sells for now', cents(bid)], ['If sold now', has(pl) ? (pl >= 0 ? '+' : '') + money(pl) : '–', has(pl) ? (pl >= 0 ? 'up' : 'down') : '']]));
+    var bar = el('div', 'prog'); var fillBar = el('i'); fillBar.style.width = Math.round(100 * Math.max(0, Math.min(1, has(bid) && tgt > x.price ? (bid - x.price) / (tgt - x.price) : 0))) + '%'; bar.appendChild(fillBar);
+    add(c, el('div', '', 'Target ' + cents(tgt) + (has(bid) ? (bid >= tgt - 1e-9 ? ': reached' : ': ' + Math.round((tgt - bid) * 100) + '¢ to go') : '') + ' · ' + (atT >= 0 ? '+' : '') + money(atT) + ' there'), bar);
+    var seg = el('div', 'seg'); var btn = function (label, fn, on) { var b = el('button', '', label); b.type = 'button'; if (on !== undefined) b.setAttribute('aria-pressed', String(on)); b.addEventListener('click', fn); seg.appendChild(b); return b; };
+    var setT = function (v) { x.target = Math.min(0.99, Math.max(0.02, Math.round(v * 100) / 100)); saveJ(); if (rule) { dropRule(rule.id); addRuleRaw({ event: x.event, ticker: rule.ticker, side: x.side, name: last(x.name), title: x.title, op: 'bid>=', price: x.target }); } renderJournal(true); };
+    btn(rule ? 'Exit alert on at ' + cents(rule.price) : 'Set exit alert at ' + cents(tgt), function () {
+      if (rule) { dropRule(rule.id); renderJournal(true); return; }
+      var tk = x.ticker || (sd && sd.ticker); if (!tk) { say('Cannot set this alert', 'The match is not listed right now.'); return; }
+      addRuleRaw({ event: x.event, ticker: tk, side: x.side, name: last(x.name), title: x.title, op: 'bid>=', price: tgt }); say('Exit alert set', last(x.name) + ' sell price reaches ' + cents(tgt) + '.'); renderJournal(true);
+    }, !!rule);
+    btn('Target −5', function () { setT(tgt - 0.05); }); btn('Target +5', function () { setT(tgt + 0.05); });
+    c.appendChild(seg); seg = el('div', 'seg');
+    var close = function (status, exit) { x.status = status; x.exit = exit; if (rule) dropRule(rule.id); saveJ(); renderJournal(true); };
+    if (has(bid)) btn('Sold at ' + cents(bid), function () { close('sold', bid); });
+    var sp = el('input'); sp.type = 'number'; sp.inputMode = 'numeric'; sp.placeholder = 'sold at ¢'; sp.min = '1'; sp.max = '99'; sp.style.width = '104px'; sp.style.font = 'inherit'; sp.style.padding = '6px 8px'; sp.style.borderRadius = '8px'; sp.style.border = '1px solid var(--line)'; sp.style.background = 'var(--panel)'; sp.style.color = 'var(--ink)'; sp.setAttribute('aria-label', 'Price you sold at, in cents'); seg.appendChild(sp);
+    btn('Sold', function () { var v = parseFloat(sp.value); if (!(v >= 1 && v <= 99)) { sp.focus(); return; } close('sold', v / 100); });
+    btn('Won', function () { close('won', null); }); btn('Lost', function () { close('lost', null); });
+    btn('Delete', function () { if (rule) dropRule(rule.id); J = J.filter(function (y) { return y.id !== x.id; }); saveJ(); renderJournal(true); });
+    c.appendChild(seg); return c;
+  }
+  function posTick() { var open = J.filter(function (x) { return x.status === 'open'; }); if (open.length) quotes(open.map(function (x) { return x.event; })).then(function () { if (location.hash === '#positions') renderJournal(true); }); }
+  function renderJournal(noFetch) {
+    var typing = document.activeElement && document.activeElement.tagName === 'INPUT' && $('positionsView').contains(document.activeElement);
     var done = J.filter(function (x) { return x.status !== 'open'; }); var open = J.filter(function (x) { return x.status === 'open'; });
+    if (!noFetch && open.length) quotes(open.map(function (x) { return x.event; })).then(function () { if (location.hash === '#positions') renderJournal(true); });
+    if (typing && noFetch) return; // do not rebuild the list under someone typing a price
+    var po = $('pOpen'); po.replaceChildren();
+    if (!open.length) po.appendChild(el('div', 'empty', 'No open trades. On any match tap Track trade, and it shows here with what it sells for now and how far it is from your target.'));
+    open.forEach(function (x) { po.appendChild(posCard(x)); });
     var net = done.reduce(function (q, x) { return q + pnlOf(x); }, 0); var wins = done.filter(function (x) { return pnlOf(x) > 0; }).length;
     var sum = $('jSum'); sum.replaceChildren();
-    sum.appendChild(trio([['Net result', done.length ? (net >= 0 ? '+' : '') + money(net) : '–', net >= 0 ? 'up' : 'down'], ['Record', done.length ? wins + '-' + (done.length - wins) : '–'], ['Open stake', money(open.reduce(function (q, x) { return q + x.cost; }, 0))]]));
-    if (done.length) { var staked = done.reduce(function (q, x) { return q + x.cost; }, 0); sum.appendChild(el('div', 'small', 'Return on money staked: ' + (100 * net / staked).toFixed(1) + '% over ' + done.length + ' settled bets. ' + (done.length < 100 ? 'Under 100 bets this is mostly luck either way.' : ''))); }
+    sum.appendChild(trio([['Closed result', done.length ? (net >= 0 ? '+' : '') + money(net) : '–', net >= 0 ? 'up' : 'down'], ['Record', done.length ? wins + '-' + (done.length - wins) : '–'], ['Open stake', money(open.reduce(function (q, x) { return q + x.cost; }, 0))]]));
+    if (done.length) { var staked = done.reduce(function (q, x) { return q + x.cost; }, 0); sum.appendChild(el('div', 'small', 'Return on money staked: ' + (100 * net / staked).toFixed(1) + '% over ' + done.length + ' closed trades. ' + (done.length < 100 ? 'Under 100 trades this is mostly luck either way.' : ''))); }
     var list = $('jList'); list.replaceChildren();
-    if (!J.length) list.appendChild(el('div', 'empty', 'No bets logged yet. Open a match, set your stake under Cost to act, and tap Add this bet to my journal.'));
-    J.forEach(function (x) {
+    if (!done.length) list.appendChild(el('div', 'empty', 'Nothing closed yet.'));
+    done.forEach(function (x) {
       var c = el('div', 'card'); var top = el('div', 'top'); var pl = pnlOf(x);
-      add(top, el('b', '', x.name), el('span', 'chip' + (x.status === 'open' ? '' : pl > 0 ? ' good' : ' bad'), x.status === 'open' ? 'Open' : (x.status === 'sold' ? 'Sold at ' + cents(x.exit) + ', ' : x.status === 'won' ? 'Won, ' : 'Lost, ') + (pl >= 0 ? '+' : '') + money(pl)));
+      add(top, el('b', '', x.name), el('span', 'chip' + (pl > 0 ? ' good' : ' bad'), (x.status === 'sold' ? 'Sold at ' + cents(x.exit) + ', ' : x.status === 'won' ? 'Won, ' : 'Lost, ') + (pl >= 0 ? '+' : '') + money(pl)));
       add(c, top, el('div', 'small', x.title + ', ' + day(x.t) + ' ' + clock(x.t)), el('div', '', x.qty + ' contracts at ' + cents(x.price) + ', cost ' + money(x.cost)), el('div', 'small', 'App said: ' + (x.readTitle || 'nothing') + (has(x.fair) ? ' (model fair ' + cents(x.fair) + ')' : '')));
-      var seg = el('div', 'seg');
-      var btn = function (label, fn) { var b = el('button', '', label); b.type = 'button'; b.addEventListener('click', fn); seg.appendChild(b); };
-      if (x.status === 'open') {
-        btn('Won', function () { x.status = 'won'; saveJ(); renderJournal(); }); btn('Lost', function () { x.status = 'lost'; saveJ(); renderJournal(); });
-        var sp = el('input'); sp.type = 'number'; sp.inputMode = 'numeric'; sp.placeholder = 'sold at ¢'; sp.min = '1'; sp.max = '99'; sp.style.width = '110px'; sp.style.font = 'inherit'; sp.style.padding = '6px 8px'; sp.style.borderRadius = '8px'; sp.style.border = '1px solid var(--line)'; sp.style.background = 'var(--panel)'; sp.style.color = 'var(--ink)'; sp.setAttribute('aria-label', 'Price you sold at, in cents'); seg.appendChild(sp);
-        btn('Sold', function () { var v = parseFloat(sp.value); if (!(v >= 1 && v <= 99)) { sp.focus(); return; } x.status = 'sold'; x.exit = v / 100; saveJ(); renderJournal(); });
-      } else btn('Reopen', function () { x.status = 'open'; x.exit = null; saveJ(); renderJournal(); });
-      btn('Delete', function () { J = J.filter(function (y) { return y.id !== x.id; }); saveJ(); renderJournal(); });
+      var seg = el('div', 'seg'); var btn = function (label, fn) { var b = el('button', '', label); b.type = 'button'; b.addEventListener('click', fn); seg.appendChild(b); };
+      btn('Reopen', function () { x.status = 'open'; x.exit = null; saveJ(); renderJournal(); });
+      btn('Delete', function () { J = J.filter(function (y) { return y.id !== x.id; }); saveJ(); renderJournal(true); });
       c.appendChild(seg); list.appendChild(c);
     });
     var by = $('jBy'); by.replaceChildren(); var groups = {};
     done.forEach(function (x) { var g = groups[x.read] = groups[x.read] || { n: 0, net: 0, w: 0 }; g.n++; g.net += pnlOf(x); if (pnlOf(x) > 0) g.w++; });
     var names = { bet: 'Set-break gap', lean: 'Lean', watch: 'Small bet if stats agree', pass: 'App said no bet', none: 'No read' };
-    if (!done.length) { by.appendChild(el('div', 'small', 'Once bets are settled, this shows whether you do better when you follow the app or when you ignore it.')); return; }
+    if (!done.length) { by.appendChild(el('div', 'small', 'Once trades are closed, this shows whether you do better when you follow the app or when you ignore it.')); return; }
     var kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', 'Record'), el('span', 'h', 'Net'));
     Object.keys(groups).forEach(function (k) { var g = groups[k]; add(kv, el('span', 'k', names[k] || k), el('span', 'num', g.w + '-' + (g.n - g.w)), el('span', 'num ' + (g.net >= 0 ? 'up' : 'down'), (g.net >= 0 ? '+' : '') + money(g.net))); });
     by.appendChild(kv);
@@ -1196,7 +1449,21 @@
     else if (pu.url && st === false) box.appendChild(el('div', 'small err', 'Could not reach the logger at that address.'));
     box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for top scorers and starting quarterbacks, even with the app closed.'));
   }
-  function loadLogger() { renderPush(); if (!pu.url) return; lg('/status').then(function (s) { pu.status = s; renderPush(); }).catch(function () { pu.status = false; renderPush(); }); }
+  function loadInjuries() {
+    var box = $('iList'); if (!pu.url) { box.replaceChildren(el('div', 'small', 'Needs the logger address in the box above.')); return; }
+    lg('/injuries').then(function (d) {
+      var rows = (d.changes || []).filter(function (x) { return x.pushed; }).slice(0, 12); box.replaceChildren();
+      if (!rows.length) { box.appendChild(el('div', 'small', 'No status change for a top NBA scorer or a starting quarterback has been logged yet.')); return; }
+      var list = el('div', 'rows');
+      rows.forEach(function (x) {
+        var a = x.event ? el('a') : el('div'); if (x.event) a.href = '#m=' + encodeURIComponent(x.event);
+        var l = el('span', 'l', String(x.lg).toUpperCase() + ' · ' + x.name + ' (' + x.team + '): ' + (x.was ? String(x.was).toLowerCase() + ' to ' : '') + String(x.now).toLowerCase());
+        l.appendChild(el('div', 'small', ago(x.t) + (has(x.mid) ? ' · team was ' + cents(x.mid) + ' on Kalshi then' : ''))); a.appendChild(l); list.appendChild(a);
+      });
+      add(box, list, el('div', 'small', 'From ESPN\'s injury list, checked every minute by the logger.'));
+    }).catch(function () { box.replaceChildren(el('div', 'small', 'Could not reach the logger just now.')); });
+  }
+  function loadLogger() { withSub(function (sub) { var was = pu.on; pu.on = !!sub; if (pu.on && !was) pullRules(); }); renderPush(); if (!pu.url) return; lg('/status').then(function (s) { pu.status = s; renderPush(); }).catch(function () { pu.status = false; renderPush(); }); }
 
   // ---------- big-add alerts: checked every minute on any screen ----------
   var al = { data: null, seen: {}, first: true, sound: false, ctx: null, fresh: {} };
@@ -1229,7 +1496,7 @@
     var s = $('aStatus'); s.replaceChildren();
     add(s, document.createTextNode('Checked '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(', every minute while the app is open. ' + d.wallets + ' wallets' + (d.failed ? ', ' + d.failed + ' could not be read this time' : '') + '.'));
   }
-  function badge() { var n = Object.keys(al.fresh).length; var b = $('aBadge'); b.hidden = !n || location.hash === '#whales'; b.textContent = String(n); document.title = (n && location.hash !== '#whales' ? '(' + n + ') ' : '') + 'Court Edge'; }
+  function badge() { var n = Object.keys(al.fresh).length + mine; var b = $('aBadge'); b.hidden = !n || location.hash === '#alerts'; b.textContent = String(n); document.title = (n && location.hash !== '#alerts' ? '(' + n + ') ' : '') + 'Court Edge'; }
   function loadAlerts() {
     get('/api/alerts').then(function (d) {
       al.data = d; var fresh = [];
@@ -1238,14 +1505,13 @@
       try { localStorage.setItem('ce-alerts-seen', JSON.stringify(al.seen)); } catch (e) {}
       renderAlerts(); badge();
       if (fresh.length) {
-        var a = fresh[0]; var t = $('toast'); t.replaceChildren();
-        add(t, el('b', '', a.whale + ' ' + (a.fresh ? 'opened ' : 'added ') + usd(a.added) + ' on ' + (a.outcome || 'one side')), el('span', '', a.title + ' (' + a.cat + ')' + (fresh.length > 1 ? ', and ' + (fresh.length - 1) + ' more' : '') + '. Tap to see.'));
-        t.hidden = false; if (al.sound) beep(); if (navigator.vibrate) { try { navigator.vibrate(200); } catch (e) {} }
-        clearTimeout(al.hide); al.hide = setTimeout(function () { t.hidden = true; }, 15000);
+        var a = fresh[0];
+        say(a.whale + ' ' + (a.fresh ? 'opened ' : 'added ') + usd(a.added) + ' on ' + (a.outcome || 'one side'), a.title + ' (' + a.cat + ')' + (fresh.length > 1 ? ', and ' + (fresh.length - 1) + ' more' : '') + '. Tap to see.', '#alerts');
+        if (al.sound) beep(); if (navigator.vibrate) { try { navigator.vibrate(200); } catch (e) {} }
       }
     }).catch(function () { if (!al.data) $('aStatus').textContent = 'Could not check for big adds. Trying again in a minute.'; });
   }
-  $('toast').addEventListener('click', function () { $('toast').hidden = true; location.hash = '#whales'; window.scrollTo(0, 0); });
+  $('toast').addEventListener('click', function () { var t = $('toast'); t.hidden = true; if (t.dataset.go) { location.hash = t.dataset.go; window.scrollTo(0, 0); } });
   // remember which sections are open
   var folds = {}; try { folds = JSON.parse(localStorage.getItem('ce-folds') || '{}') || {}; } catch (e) {}
   document.querySelectorAll('details.fold').forEach(function (dt) {
@@ -1257,13 +1523,22 @@
   setInterval(function () { if (!document.hidden) loadAlerts(); }, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) loadAlerts(); });
 
-  $('back').addEventListener('click', function () { location.hash = cur.kind === 'game' ? '#' + cur.league : ''; });
-  try { var keep = localStorage.getItem('ce-sport'); if ((location.hash === '' || location.hash === '#') && (keep === 'nba' || keep === 'nfl')) location.replace('#' + keep); } catch (e) {}
+  $('back').addEventListener('click', function () { location.hash = lastList || (cur.kind === 'game' ? '#' + cur.league : ''); });
+  try { var sport0 = localStorage.getItem('ce-sport'); if ((location.hash === '' || location.hash === '#') && (sport0 === 'nba' || sport0 === 'nfl' || sport0 === 'whales')) location.replace('#' + sport0); } catch (e) {}
+  // bottom tabs and the match action bar
+  [['tabD', 'discover'], ['tabWa', 'watch'], ['tabP', 'positions'], ['tabA', 'alerts']].forEach(function (t) { $(t[0]).insertBefore(icon(t[1]), $(t[0]).firstChild); });
+  $('actAlert').insertBefore(icon('alerts'), $('actAlert').firstChild); $('actTrade').insertBefore(icon('positions'), $('actTrade').firstChild);
+  $('actSave').addEventListener('click', function () { if (!cur.event) return; toggleWatch(cur.event, cur.d ? titleOf(cur.d) : cur.event); paintSave(); });
+  $('actAlert').addEventListener('click', function () { if (cur.d) alertSheet(cur.d); });
+  $('actTrade').addEventListener('click', function () { if (cur.d) tradeSheet(cur.d); });
+  withSub(function (sub) { pu.on = !!sub; });
+  setInterval(checkRules, 30000);
   window.addEventListener('hashchange', route);
   route();
   var onGames = function () { return location.hash === '#nba' || location.hash === '#nfl'; };
-  setInterval(function () { if (!document.hidden && !cur.event && location.hash !== '#whales' && location.hash !== '#journal') { if (onGames()) loadGames(); else loadList(); } }, LIST_MS);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else if (onGames()) loadGames(); else if (location.hash !== '#journal') loadList(); if (!feed.timer) loadFeed(); });
+  var onList = function () { return location.hash === '' || location.hash === '#'; };
+  setInterval(function () { if (document.hidden || cur.event) return; if (onGames()) loadGames(); else if (onList()) loadList(); else if (location.hash === '#watch') loadWatch(); else if (location.hash === '#positions') posTick(); }, LIST_MS);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (cur.event) loadDetail(); else if (location.hash === '#whales') loadWhaleboard(); else if (onGames()) loadGames(); else if (onList()) loadList(); else if (location.hash === '#watch') loadWatch(); else if (location.hash === '#positions') posTick(); checkRules(); if (!feed.timer) loadFeed(); });
 })();
 </script>
 </body>

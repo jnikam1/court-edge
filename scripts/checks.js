@@ -72,9 +72,9 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
   });
 
   // the logger, with its database and the push services faked
-  await check('logger: tests reach one signed-up phone only, and sign-ups must be real push addresses', async () => {
+  await check('logger: tests and price alerts reach one signed-up phone only, and sign-ups must be real push addresses', async () => {
     const mod = await import(path.join(root, 'worker/src/index.js')); const worker = mod.default;
-    const kv = new Map(); const subs = new Map(); const sent = [];
+    const kv = new Map(); const subs = new Map(); const rules = new Map(); const sent = []; let quote = { bid: '0.6000', ask: '0.6200', status: 'active' };
     const stmt = (sql, args) => ({
       bind: (...a) => stmt(sql, a),
       first: async () => {
@@ -82,6 +82,7 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
         if (/SELECT 1 x FROM subs/.test(sql)) return subs.has(args[0]) ? { x: 1 } : null;
         if (/SELECT tested FROM subs/.test(sql)) return subs.has(args[0]) ? { tested: subs.get(args[0]).tested || null } : null;
         if (/COUNT\(\*\) n FROM subs/.test(sql)) return { n: subs.size };
+        if (/COUNT\(\*\) n FROM rules/.test(sql)) return { n: [...rules.values()].filter((r) => r.endpoint === args[0] && r.fired === null).length };
         return { n: 0, t: null };
       },
       run: async () => {
@@ -89,12 +90,20 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
         else if (/INSERT INTO subs/.test(sql)) subs.set(args[0], subs.get(args[0]) || {});
         else if (/UPDATE subs SET tested/.test(sql)) subs.get(args[1]).tested = args[0];
         else if (/DELETE FROM subs/.test(sql)) subs.delete(args[0]);
+        else if (/INSERT INTO rules/.test(sql)) rules.set(args[0], { id: args[0], endpoint: args[1], ticker: args[2], title: args[3], op: args[4], price: args[5], url: args[6], created: args[7], fired: null });
+        else if (/UPDATE rules SET fired/.test(sql)) rules.get(args[1]).fired = args[0];
+        else if (/DELETE FROM rules/.test(sql)) rules.delete(args[0]);
         return {};
       },
-      all: async () => ({ results: /SELECT endpoint FROM subs/.test(sql) ? [...subs.keys()].map((endpoint) => ({ endpoint })) : [] }),
+      all: async () => ({ results: /SELECT endpoint FROM subs/.test(sql) ? [...subs.keys()].map((endpoint) => ({ endpoint })) : /FROM rules WHERE fired IS NULL/.test(sql) ? [...rules.values()].filter((r) => r.fired === null) : /FROM rules WHERE endpoint/.test(sql) ? [...rules.values()].filter((r) => r.endpoint === args[0]) : [] }),
     });
     const env = { APP_URL: 'https://app.example', DB: { prepare: (sql) => stmt(sql, []), batch: async () => [] } };
-    const realFetch = global.fetch; global.fetch = async (url) => { sent.push(String(url)); return { status: 201, ok: true, json: async () => ({}) }; };
+    const realFetch = global.fetch; global.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('kalshi.com')) return { status: 200, ok: true, json: async () => ({ markets: [{ ticker: 'KXNBAGAME-26NOV13NYKIND-NYK', yes_bid_dollars: quote.bid, yes_ask_dollars: quote.ask, status: quote.status }] }) };
+      if (u.startsWith('https://app.example')) return { status: 200, ok: true, json: async () => ({}) };
+      sent.push(u); return { status: 201, ok: true, json: async () => ({}) };
+    };
     const post = async (p, body) => { const r = await worker.fetch(new Request('https://logger.example' + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env); return { status: r.status, body: await r.json() }; };
     try {
       const phone = 'https://web.push.apple.com/QAbc123'; const other = 'https://web.push.apple.com/QOther456';
@@ -109,6 +118,18 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       assert.strictEqual((await post('/test', { endpoint: phone })).status, 429, 'a second test straight away is refused');
       const mine = await post('/latest', { endpoint: phone }); const theirs = await post('/latest', { endpoint: other });
       assert.strictEqual(mine.body.notes.filter((n) => n.kind === 'test').length, 1, 'the asking phone sees its test note'); assert.strictEqual(theirs.body.notes.length, 0, 'another phone does not');
+      // price alerts: only a signed-up phone can set one, it fires once when the bid gets there, and only that phone hears
+      const rule = { id: 'r1', ticker: 'KXNBAGAME-26NOV13NYKIND-NYK', title: 'Knicks bid reaches 80¢', op: 'bid>=', price: 0.8, url: '/#m=KXNBAGAME-26NOV13NYKIND' };
+      assert.strictEqual((await post('/rules', Object.assign({ endpoint: 'https://web.push.apple.com/Unknown' }, rule))).status, 403, 'a phone that is not signed up cannot set an alert');
+      assert.strictEqual((await post('/rules', Object.assign({ endpoint: phone }, rule, { ticker: 'not a ticker' }))).status, 400);
+      assert.strictEqual((await post('/rules', Object.assign({ endpoint: phone }, rule))).status, 200);
+      const run = async () => { const jobs = []; await worker.scheduled({}, env, { waitUntil: (x) => jobs.push(x) }); await Promise.all(jobs); };
+      sent.length = 0; await run(); assert.strictEqual(sent.length, 0, 'bid at 60¢: nothing sent');
+      quote = { bid: '0.8100', ask: '0.8300', status: 'active' }; await run(); assert.deepStrictEqual(sent, [phone], 'bid at 81¢: this phone is told, and only this phone');
+      await run(); assert.strictEqual(sent.length, 1, 'it does not fire twice');
+      const list = await post('/rules/list', { endpoint: phone }); assert.strictEqual(list.body.rules.length, 1); assert.strictEqual(list.body.rules[0].id, 'r1'); assert.ok(list.body.rules[0].fired > 0);
+      assert.strictEqual((await post('/rules/list', { endpoint: other })).body.rules.length, 0, 'another phone cannot see it');
+      const note = (await post('/latest', { endpoint: phone })).body.notes.find((n) => n.kind === 'price'); assert.ok(note && /81¢ bid/.test(note.body), 'the alert text carries the price');
     } finally { global.fetch = realFetch; }
   });
 

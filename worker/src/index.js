@@ -16,6 +16,8 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS inj (id TEXT PRIMARY KEY, lg TEXT, team TEXT, name TEXT, tag TEXT, t INTEGER, big INTEGER DEFAULT 0)',
   'CREATE TABLE IF NOT EXISTS injlog (t INTEGER, lg TEXT, team TEXT, name TEXT, was TEXT, now TEXT, event TEXT, mid REAL, lo REAL, hi REAL, pushed INTEGER)',
   'CREATE INDEX IF NOT EXISTS injlog_t ON injlog (t)',
+  'CREATE TABLE IF NOT EXISTS rules (id TEXT PRIMARY KEY, endpoint TEXT, ticker TEXT, title TEXT, op TEXT, price REAL, url TEXT, created INTEGER, fired INTEGER)',
+  'CREATE INDEX IF NOT EXISTS rules_fired ON rules (fired)',
   'CREATE INDEX IF NOT EXISTS alerts_t ON alerts (t)',
 ];
 let ready = false;
@@ -51,6 +53,40 @@ async function push(env, endpoint, keys) {
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned));
   const r = await fetch(endpoint, { method: 'POST', headers: { TTL: '3600', Urgency: 'high', Authorization: 'vapid t=' + unsigned + '.' + b64u(sig) + ', k=' + keys.pub } });
   return r.status;
+}
+
+// One phone's own notes (its price alerts and tests) sit beside the shared ones, then that phone alone is pushed.
+async function tellOne(env, ep, n) {
+  const k = 'pn:' + (await sha(ep)); const old = JSON.parse((await kvGet(env, k)) || '[]');
+  await kvSet(env, k, JSON.stringify([n].concat(old).slice(0, 6)));
+  let st = 0; try { st = await push(env, ep, await vapid(env)); } catch (e) { st = -1; }
+  if (st === 404 || st === 410) await env.DB.prepare('DELETE FROM subs WHERE endpoint = ?').bind(ep).run();
+  return st;
+}
+const KALSHI = 'https://api.elections.kalshi.com/trade-api/v2';
+const MAX_RULES = 30; // open price alerts per phone
+// Personal price alerts: "tell me when this side's bid reaches 80c". Checked once a minute against Kalshi's own quote.
+async function checkRules(env, now) {
+  const open = ((await env.DB.prepare('SELECT * FROM rules WHERE fired IS NULL LIMIT 400').all()).results) || [];
+  if (!open.length) return { open: 0, fired: 0 };
+  const tickers = [...new Set(open.map((r) => r.ticker))]; const px = {}; let error = null;
+  for (let k = 0; k < tickers.length; k += 40) {
+    try { const r = await fetch(KALSHI + '/markets?limit=200&tickers=' + tickers.slice(k, k + 40).join(','), { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error('Kalshi ' + r.status); for (const m of (await r.json()).markets || []) px[m.ticker] = m; }
+    catch (e) { error = String(e && e.message); }
+  }
+  let fired = 0;
+  for (const r of open) {
+    const m = px[r.ticker]; const done = (v) => env.DB.prepare('UPDATE rules SET fired = ? WHERE id = ?').bind(v, r.id).run();
+    if (now - r.created > 4 * 86400) { await done(-1); continue; } // stale: dropped quietly
+    if (!m) continue;
+    if (m.status !== 'active' && m.status !== 'open') { await done(-1); continue; } // market closed before the price was reached
+    const bid = Number(m.yes_bid_dollars); const ask = Number(m.yes_ask_dollars);
+    const hit = r.op === 'bid>=' ? bid >= r.price - 1e-9 : ask > 0 && ask <= r.price + 1e-9;
+    if (!hit) continue;
+    await done(now); fired++;
+    await tellOne(env, r.endpoint, { id: 'r-' + r.id + '-' + now, t: now, kind: 'price', url: r.url || '/#alerts', title: r.title, body: 'Now ' + Math.round(bid * 100) + '¢ bid, ' + Math.round(ask * 100) + '¢ ask on Kalshi. Checked once a minute, so the price may have moved.' });
+  }
+  return { open: open.length, fired, error };
 }
 
 async function pushAll(env) {
@@ -116,7 +152,7 @@ async function tick(env) {
       fresh++;
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
-      notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#whales', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side'), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
+      notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side'), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
     }
     note.alerts = al.alerts.length; note.fresh = fresh;
   } else note.alertError = al && al.error;
@@ -168,6 +204,8 @@ async function tick(env) {
     await kvSet(env, 'notes', JSON.stringify(notes.concat(old).slice(0, 12)));
     note.push = await pushAll(env); note.told = notes.length;
   }
+  // 5) each phone's own price alerts
+  try { note.rules = await checkRules(env, now); } catch (e) { note.rulesError = String(e && e.message); }
   await kvSet(env, 'last', JSON.stringify(note));
   return note;
 }
@@ -208,18 +246,41 @@ export default {
         if (!row) return json({ error: 'This phone is not signed up for alerts. Turn alerts on first.' }, 403);
         if (row.tested && now - row.tested < 20) return json({ error: 'Wait a few seconds between tests.' }, 429);
         await env.DB.prepare('UPDATE subs SET tested = ? WHERE endpoint = ?').bind(now, ep).run();
-        await kvSet(env, 'test:' + (await sha(ep)), JSON.stringify({ id: 'test-' + now, t: now, kind: 'test', url: '/#whales', title: 'Court Edge test', body: 'Phone alerts are working. Whale adds and key injury changes will arrive like this.' }));
-        let st = 0; try { st = await push(env, ep, await vapid(env)); } catch (e) { st = -1; }
+        const st = await tellOne(env, ep, { id: 'test-' + now, t: now, kind: 'test', url: '/#alerts', title: 'Court Edge test', body: 'Phone alerts are working. Your price alerts, whale adds and key injury changes will arrive like this.' });
         return json({ phones: 1, delivered: st >= 200 && st < 300 ? 1 : 0, status: st });
       }
       if (url.pathname === '/latest') {
         const now = Math.floor(Date.now() / 1000); const notes = JSON.parse((await kvGet(env, 'notes')) || '[]').filter((n) => now - n.t < 900 && n.kind !== 'test');
         if (req.method === 'POST') { // a phone that sends its own push address also gets its own test note
           const b = await req.json().catch(() => null); const ep = b && b.endpoint;
-          if (typeof ep === 'string' && ep.length <= 1000) { const t = await kvGet(env, 'test:' + (await sha(ep))); if (t) { const n = JSON.parse(t); if (now - n.t < 120) notes.push(n); } }
+          if (typeof ep === 'string' && ep.length <= 1000) for (const n of JSON.parse((await kvGet(env, 'pn:' + (await sha(ep)))) || '[]')) if (now - n.t < 900) notes.push(n);
         }
         notes.sort((x, y) => y.t - x.t);
         return json({ now, notes });
+      }
+      if (url.pathname.startsWith('/rules') && req.method === 'POST') { // a phone's own price alerts; its push address is its key
+        const b = await req.json().catch(() => null); const ep = b && b.endpoint; const now = Math.floor(Date.now() / 1000);
+        if (typeof ep !== 'string' || !(await env.DB.prepare('SELECT 1 x FROM subs WHERE endpoint = ?').bind(ep).first())) return json({ error: 'This phone is not signed up for alerts.' }, 403);
+        const owner = await sha(ep); const cid = typeof b.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(b.id) ? b.id : null;
+        if (url.pathname === '/rules/list') {
+          const r = await env.DB.prepare('SELECT id, ticker, title, op, price, url, created, fired FROM rules WHERE endpoint = ? ORDER BY created DESC LIMIT 60').bind(ep).all();
+          return json({ rules: (r.results || []).map((x) => Object.assign({}, x, { id: String(x.id).slice(owner.length + 1) })) });
+        }
+        if (!cid) return json({ error: 'bad alert id' }, 400);
+        if (url.pathname === '/rules/delete') { await env.DB.prepare('DELETE FROM rules WHERE id = ?').bind(owner + ':' + cid).run(); return json({ ok: true }); }
+        if (url.pathname !== '/rules') return json({ error: 'not found' }, 404);
+        const price = Number(b.price);
+        if (typeof b.ticker !== 'string' || !/^KX[A-Z0-9]{2,30}(-[A-Z0-9]{1,30}){2}$/.test(b.ticker) || (b.op !== 'bid>=' && b.op !== 'ask<=') || !(price >= 0.01 && price <= 0.99)) return json({ error: 'That alert is not valid.' }, 400);
+        const mine = await env.DB.prepare('SELECT COUNT(*) n FROM rules WHERE endpoint = ? AND fired IS NULL').bind(ep).first();
+        if (mine.n >= MAX_RULES) return json({ error: 'You have ' + MAX_RULES + ' open alerts. Remove one first.' }, 429);
+        const link = typeof b.url === 'string' && /^\/#m=[A-Za-z0-9%_-]{1,90}$/.test(b.url) ? b.url : '/#alerts';
+        await env.DB.prepare('INSERT INTO rules (id, endpoint, ticker, title, op, price, url, created, fired) VALUES (?,?,?,?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET price = excluded.price, op = excluded.op, title = excluded.title, fired = NULL, created = excluded.created')
+          .bind(owner + ':' + cid, ep, b.ticker, String(b.title || 'Price alert').slice(0, 120), b.op, price, link, now).run();
+        return json({ ok: true });
+      }
+      if (url.pathname === '/probe') { // can the logger reach Kalshi's quotes? Used to check price alerts end to end.
+        try { const r = await fetch(KALSHI + '/markets?limit=1&status=open&series_ticker=KXNBAGAME', { headers: { Accept: 'application/json' } }); const d = r.ok ? await r.json() : null; const m = d && d.markets && d.markets[0]; return json({ kalshi: r.status, sample: m ? { ticker: m.ticker, bid: m.yes_bid_dollars, ask: m.yes_ask_dollars, status: m.status } : null }); }
+        catch (e) { return json({ kalshi: 0, error: String(e && e.message) }); }
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
       if (url.pathname === '/games') { // price and score history for one NBA or NFL game
