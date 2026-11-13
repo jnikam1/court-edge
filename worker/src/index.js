@@ -6,7 +6,7 @@
 
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)',
-  'CREATE TABLE IF NOT EXISTS subs (endpoint TEXT PRIMARY KEY, created INTEGER, fails INTEGER DEFAULT 0)',
+  'CREATE TABLE IF NOT EXISTS subs (endpoint TEXT PRIMARY KEY, created INTEGER, fails INTEGER DEFAULT 0, tested INTEGER)',
   'CREATE TABLE IF NOT EXISTS sent (id TEXT PRIMARY KEY, last INTEGER, t INTEGER)',
   'CREATE TABLE IF NOT EXISTS alerts (t INTEGER, id TEXT, whale TEXT, cat TEXT, title TEXT, outcome TEXT, added INTEGER, paid REAL, stake INTEGER, cur REAL, last INTEGER)',
   'CREATE TABLE IF NOT EXISTS snaps (t INTEGER, event TEXT, state TEXT, a_bid REAL, a_ask REAL, b_bid REAL, b_ask REAL, pm_a REAL, sets TEXT, points TEXT, server TEXT)',
@@ -22,6 +22,7 @@ let ready = false;
 async function ensure(env) {
   if (ready) return; await env.DB.batch(SCHEMA.map((q) => env.DB.prepare(q)));
   try { await env.DB.prepare('ALTER TABLE inj ADD COLUMN big INTEGER DEFAULT 0').run(); } catch (e) { /* already there */ }
+  try { await env.DB.prepare('ALTER TABLE subs ADD COLUMN tested INTEGER').run(); } catch (e) { /* already there */ }
   ready = true;
 }
 
@@ -42,6 +43,7 @@ async function vapid(env) {
 
 // A push with no body: the phone wakes the app's service worker, which fetches the alert text itself.
 async function push(env, endpoint, keys) {
+  if (!pushHost(endpoint)) return 410; // not a push service: treated as gone, so the row is removed
   const aud = new URL(endpoint).origin;
   const enc = (o) => b64u(new TextEncoder().encode(JSON.stringify(o)));
   const unsigned = enc({ typ: 'JWT', alg: 'ES256' }) + '.' + enc({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: env.APP_URL });
@@ -65,6 +67,11 @@ async function pushAll(env) {
   return { phones: (results || []).length, delivered: ok, statuses };
 }
 
+// Push services a phone or browser can hand us. Anything else is refused, so this cannot be used to make the logger call arbitrary addresses.
+const PUSH_HOSTS = /(^|\.)(push\.apple\.com|fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com)$/;
+const pushHost = (ep) => { try { const u = new URL(ep); return u.protocol === 'https:' && !u.username && !u.port && PUSH_HOSTS.test(u.hostname) && ep.length <= 1000; } catch (e) { return false; } };
+const MAX_PHONES = 500;
+const sha = async (s) => b64u(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))).slice(0, 24);
 const kUsd = (x) => '$' + (x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : Math.round(x / 1000) + 'k');
 const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x);
 const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
@@ -186,18 +193,34 @@ export default {
         return json({ ok: true, now: Math.floor(Date.now() / 1000), last: last ? JSON.parse(last) : null, phones: subs.n, snapshots: snaps.n, snapshots24h: snaps24.n, alertsLogged: alerts.n, since: firstSnap ? firstSnap.t : null, gameSnapshots: gs.n, injuryChanges: il.n, injuriesTracked: tracked.n });
       }
       if (url.pathname === '/subscribe' && req.method === 'POST') {
-        const b = await req.json(); const ep = b && b.endpoint;
-        if (typeof ep !== 'string' || !/^https:\/\//.test(ep) || ep.length > 1000) return json({ error: 'bad subscription' }, 400);
+        const b = await req.json().catch(() => null); const ep = b && b.endpoint;
+        if (typeof ep !== 'string' || !pushHost(ep)) return json({ error: 'That is not a phone or browser push address.' }, 400);
+        const known = await env.DB.prepare('SELECT 1 x FROM subs WHERE endpoint = ?').bind(ep).first();
+        if (!known && (await env.DB.prepare('SELECT COUNT(*) n FROM subs').first()).n >= MAX_PHONES) return json({ error: 'Sign-ups are full.' }, 429);
         await env.DB.prepare('INSERT INTO subs (endpoint, created) VALUES (?, ?) ON CONFLICT(endpoint) DO UPDATE SET fails = 0').bind(ep, Math.floor(Date.now() / 1000)).run();
         return json({ ok: true });
       }
       if (url.pathname === '/unsubscribe' && req.method === 'POST') { const b = await req.json(); await env.DB.prepare('DELETE FROM subs WHERE endpoint = ?').bind(String(b && b.endpoint)).run(); return json({ ok: true }); }
       if (url.pathname === '/test' && req.method === 'POST') {
-        const now = Math.floor(Date.now() / 1000); const old = JSON.parse((await kvGet(env, 'notes')) || '[]');
-        await kvSet(env, 'notes', JSON.stringify([{ id: 'test-' + now, t: now, kind: 'test', url: '/#whales', title: 'Court Edge test', body: 'Phone alerts are working. Whale adds and key injury changes will arrive like this.' }].concat(old).slice(0, 12)));
-        return json(await pushAll(env));
+        // A test goes to one phone: the one that sent its own push address, and only if that address is signed up.
+        const b = await req.json().catch(() => null); const ep = b && b.endpoint; const now = Math.floor(Date.now() / 1000);
+        const row = typeof ep === 'string' ? await env.DB.prepare('SELECT tested FROM subs WHERE endpoint = ?').bind(ep).first() : null;
+        if (!row) return json({ error: 'This phone is not signed up for alerts. Turn alerts on first.' }, 403);
+        if (row.tested && now - row.tested < 20) return json({ error: 'Wait a few seconds between tests.' }, 429);
+        await env.DB.prepare('UPDATE subs SET tested = ? WHERE endpoint = ?').bind(now, ep).run();
+        await kvSet(env, 'test:' + (await sha(ep)), JSON.stringify({ id: 'test-' + now, t: now, kind: 'test', url: '/#whales', title: 'Court Edge test', body: 'Phone alerts are working. Whale adds and key injury changes will arrive like this.' }));
+        let st = 0; try { st = await push(env, ep, await vapid(env)); } catch (e) { st = -1; }
+        return json({ phones: 1, delivered: st >= 200 && st < 300 ? 1 : 0, status: st });
       }
-      if (url.pathname === '/latest') { const now = Math.floor(Date.now() / 1000); return json({ now, notes: JSON.parse((await kvGet(env, 'notes')) || '[]').filter((n) => now - n.t < 900) }); }
+      if (url.pathname === '/latest') {
+        const now = Math.floor(Date.now() / 1000); const notes = JSON.parse((await kvGet(env, 'notes')) || '[]').filter((n) => now - n.t < 900 && n.kind !== 'test');
+        if (req.method === 'POST') { // a phone that sends its own push address also gets its own test note
+          const b = await req.json().catch(() => null); const ep = b && b.endpoint;
+          if (typeof ep === 'string' && ep.length <= 1000) { const t = await kvGet(env, 'test:' + (await sha(ep))); if (t) { const n = JSON.parse(t); if (now - n.t < 120) notes.push(n); } }
+        }
+        notes.sort((x, y) => y.t - x.t);
+        return json({ now, notes });
+      }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
       if (url.pathname === '/games') { // price and score history for one NBA or NFL game
         const ev = url.searchParams.get('event'); if (!ev) return json({ error: 'event required' }, 400);

@@ -7,7 +7,8 @@ self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     let notes = [];
     try {
-      const d = await (await fetch(LOGGER + '/latest', { cache: 'no-store' })).json();
+      const sub = await self.registration.pushManager.getSubscription(); // sent so a test meant for this phone is included
+      const d = await (await fetch(LOGGER + '/latest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub ? sub.endpoint : null }), cache: 'no-store' })).json();
       const all = (d && d.notes) || [];
       // everything from the newest minute, three at most
       if (all.length) notes = all.filter((n) => all[0].t - n.t < 90).slice(0, 3);

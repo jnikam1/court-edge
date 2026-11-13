@@ -1,1 +1,1 @@
-{ "name": "court-edge", "version": "2.0.0", "private": true, "engines": { "node": ">=20" } }
+{ "name": "court-edge", "version": "2.0.0", "private": true, "scripts": { "test": "node scripts/checks.js" }, "engines": { "node": ">=20" } }

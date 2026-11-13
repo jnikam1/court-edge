@@ -456,8 +456,8 @@
     add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · ' + gs.length + ' games · refreshes every 15s' + (d.scores ? '' : ' · scores and lines are not answering, showing Kalshi prices only')));
   }
   function loadGames() {
-    var lg = gm.league; if (!lg) return;
-    get('/api/sports?league=' + lg).then(renderGames).catch(function (e) { if (lg === gm.league) $('gStatus').replaceChildren(el('span', 'err', 'Could not load ' + lg.toUpperCase() + ' games just now (' + e.message + '). Retrying.')); });
+    var league = gm.league; if (!league) return;
+    get('/api/sports?league=' + league).then(renderGames).catch(function (e) { if (league === gm.league) $('gStatus').replaceChildren(el('span', 'err', 'Could not load ' + league.toUpperCase() + ' games just now (' + e.message + '). Retrying.')); });
   }
 
   function gHead(d) {
@@ -466,7 +466,7 @@
     add(box, top, gameGrid(d));
     var k = d.favA ? 'a' : 'b'; var pick = function (a) { return !has(a) ? null : d.favA ? a : 1 - a; };
     var third = d.model.live ? ['Score model', cents(pick(d.model.live.a))] : ['On Polymarket', cents(d.pm && d.pm.price ? d.pm.price[d.favA ? 0 : 1] : null)];
-    box.appendChild(trio([[d[k].name + ' on Kalshi', cents(pick(d.midA))], [d.book ? d.book.name + ' fair' : 'Sportsbook fair', cents(d.book ? pick(d.book.a) : null)], third]));
+    box.appendChild(trio([[d[k].name + ' on Kalshi', cents(pick(d.midA))], [d.book ? d.book.name + (d.book.stale ? ' at the close' : ' fair') : 'Sportsbook fair', cents(d.book ? pick(d.book.a) : null)], third]));
     var bits = [];
     if (d.sit && d.sit.text && d.state === 'live') bits.push(d.sit.text);
     if (d.book && d.book.text) bits.push((d.book.stale ? 'Closing line ' : 'Line ') + d.book.text + (has(d.book.total) ? ', total ' + d.book.total : ''));
@@ -521,6 +521,7 @@
     if (L.total) table('Total points', L.total, function (x) { return 'Over ' + x; });
     if (!L.spread && !L.total) { box.appendChild(el('div', 'small', d.book ? 'No Kalshi spread or total markets found for this game.' : 'No sportsbook line yet, so nothing to line the Kalshi spread and total markets up against.')); return; }
     if (flagged.length) { var v = el('div', 'verdict lean'); add(v, el('b', 't', 'Off the sportsbook line')); var ul = el('ul'); flagged.forEach(function (t) { ul.appendChild(el('li', '', t)); }); v.appendChild(ul); box.appendChild(v); }
+    if (L.stale) box.appendChild(el('div', 'small', 'In play, the only sportsbook number available is the closing line, so no comparison or gap is shown.'));
     box.appendChild(el('div', 'small', 'The sportsbook price is only shown on the line it actually quotes. Spreads and totals trade less than the winner market, so they follow news more slowly. A gap of 3¢ or more after the fee is flagged.'));
   }
   function gStrength(d) {
@@ -1031,7 +1032,7 @@
   function route() {
     wb.timers.forEach(clearInterval); wb.timers = [];
     var m = /^#m=(.+)$/.exec(location.hash);
-    if (m) { var ev = decodeURIComponent(m[1]); var lg = leagueOf(ev); if (lg) openGame(lg, ev); else openDetail(ev); return; }
+    if (m) { var ev = decodeURIComponent(m[1]); var league = leagueOf(ev); if (league) openGame(league, ev); else openDetail(ev); return; }
     cur.timers.forEach(clearInterval); cur = { event: null, srv: null, d: null, timers: [], aiText: null };
     var sp = location.hash === '#nba' ? 'nba' : location.hash === '#nfl' ? 'nfl' : null;
     if (sp) { rememberSport(sp); show('gamesView'); sportSeg('gSport', sp); if (gm.league !== sp) { gm.league = sp; gm.data = null; ['gGaps', 'gLive', 'gUp', 'gInj'].forEach(function (id) { $(id).replaceChildren(); }); $('gStatus').textContent = 'Loading Kalshi prices…'; } loadGames(); badge(); return; }
@@ -1048,8 +1049,10 @@
   var makerFee = function (p, n) { return Math.ceil(0.0175 * n * p * (1 - p) * 100 - 1e-9) / 100; }; // smaller fee some markets charge on resting orders
   var money = function (x) { return (x < 0 ? '−$' : '$') + Math.abs(x).toFixed(2); };
   var cs = { side: 'a', stake: 50, mode: 'take' }; try { cs.stake = parseFloat(localStorage.getItem('ce-stake')) || 50; } catch (e) {}
+  // One cent above the bid, unless that would reach the ask and trade straight away. Then join the bid.
+  function restPrice(p) { if (!has(p.bid)) return null; var up = Math.round((p.bid + 0.01) * 100) / 100; return !has(p.ask) || up < p.ask - 1e-9 ? up : p.bid; }
   function quote(d) {
-    var p = d[cs.side]; var price = cs.mode === 'take' ? p.ask : (has(p.bid) ? Math.min(has(p.ask) ? p.ask : 0.99, p.bid + 0.01) : null);
+    var p = d[cs.side]; var price = cs.mode === 'take' ? p.ask : restPrice(p);
     if (!has(price) || price <= 0 || price >= 1) return null;
     var n = Math.floor(cs.stake / price); var fee = cs.mode === 'take' ? takerFee(price, n) : d.makerFee ? makerFee(price, n) : 0; var cost = n * price + fee;
     var fair = d.model.live ? (cs.side === 'a' ? d.model.live.a : 1 - d.model.live.a) : null;
@@ -1092,7 +1095,7 @@
     var sd = $('calcSide'); sd.replaceChildren();
     ['a', 'b'].forEach(function (k) { var b = el('button', '', last(d[k].name) + ' ' + cents(d[k].ask)); b.type = 'button'; b.setAttribute('aria-pressed', String(cs.side === k)); b.addEventListener('click', function () { cs.side = k; calc(cur.d); }); sd.appendChild(b); });
     var md = $('calcMode'); md.replaceChildren();
-    [['take', 'Take the price now'], ['rest', 'Rest an order, bid +1¢']].forEach(function (o) { var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(cs.mode === o[0])); b.addEventListener('click', function () { cs.mode = o[0]; calc(cur.d); }); md.appendChild(b); });
+    [['take', 'Take the price now'], ['rest', 'Rest an order below the ask']].forEach(function (o) { var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(cs.mode === o[0])); b.addEventListener('click', function () { cs.mode = o[0]; calc(cur.d); }); md.appendChild(b); });
     calcOut(d);
   }
   function pnlOf(x) { return x.status === 'won' ? x.qty - x.cost : x.status === 'lost' ? -x.cost : x.status === 'sold' ? x.qty * x.exit - takerFee(x.exit, x.qty) - x.cost : null; }
@@ -1154,7 +1157,14 @@
         .then(function () { pu.msg = 'Alerts are on for this phone. Send a test to check.'; loadLogger(); })
         .catch(function (e) { pu.msg = 'Could not turn alerts on: ' + e.message; renderPush(); });
     });
-    btn('Send a test alert', function () { if (!pu.url) return; pu.msg = 'Sending…'; renderPush(); lg('/test', {}).then(function (r) { pu.msg = r.phones ? 'Sent to ' + r.delivered + ' of ' + r.phones + ' phones. It should arrive within a few seconds.' : 'No phone has signed up yet.'; renderPush(); }).catch(function (e) { pu.msg = 'Test failed: ' + e.message; renderPush(); }); });
+    btn('Send a test alert', function () {
+      if (!pu.url) return; if (!canPush) { pu.msg = 'Notifications are not available here. Open the app from the Home Screen icon.'; renderPush(); return; }
+      pu.msg = 'Sending…'; renderPush();
+      navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); })
+        .then(function (sub) { if (!sub) throw new Error('Turn on alerts on this phone first.'); return lg('/test', { endpoint: sub.endpoint }); }) // the test goes to this phone only
+        .then(function (r) { pu.msg = r.delivered ? 'Sent to this phone. It should arrive within a few seconds.' : 'The push service did not accept it (code ' + r.status + '). Turn alerts off and on again.'; renderPush(); })
+        .catch(function (e) { pu.msg = 'Test failed: ' + e.message; renderPush(); });
+    });
     btn('Turn off', function () { if (!canPush) return; navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) { if (!sub) return; var ep = sub.endpoint; return sub.unsubscribe().then(function () { return lg('/unsubscribe', { endpoint: ep }); }); }).then(function () { pu.msg = 'Alerts are off for this phone.'; loadLogger(); }).catch(function (e) { pu.msg = e.message; renderPush(); }); });
     box.appendChild(seg);
     if (pu.msg) box.appendChild(el('div', 'small', pu.msg));
