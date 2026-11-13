@@ -214,7 +214,7 @@
     <ul>
       <li>Prices are Kalshi's. Scores, injuries and the sportsbook line come from ESPN. The sportsbook number is DraftKings with its margin taken out.</li>
       <li>A game moves to the top when Kalshi's ask is 3¢ or more below that sportsbook price after the fee. Most gaps are news one side has not caught up with, so check for a late injury first.</li>
-      <li>Injury watch covers leading scorers and starting quarterbacks whose status is in doubt, for games in the next day and a half. The point values are a rough guide from sportsbook rules of thumb.</li>
+      <li>Injury watch covers NBA leading scorers for the next day and a half, and NFL starting quarterbacks and each team's lead runner and receiver for the next four days. The point values are a rough guide from sportsbook rules of thumb.</li>
       <li>Public team stats and public injury news are already in the price. The places worth testing are being early on late news, a stale Kalshi price after a line move, and resting orders during live swings. Not advice.</li>
     </ul>
   </section>
@@ -440,7 +440,7 @@
     put('gUp', gs.filter(function (m) { return m.state === 'upcoming' && gaps.indexOf(m) < 0; }), 'No upcoming games listed.');
     var ib = $('gInj'); ib.replaceChildren(); var w = d.watch || [];
     if (!d.injuries) ib.appendChild(el('div', 'small', 'The injury feed is not answering right now.'));
-    else if (!w.length) ib.appendChild(el('div', 'small', 'No leading scorer or starting quarterback is in doubt for a game in the next day and a half.'));
+    else if (!w.length) ib.appendChild(el('div', 'small', 'No leading scorer, runner, receiver or starting quarterback is in doubt for the next games.'));
     else {
       var rows = el('div', 'rows');
       w.slice(0, 14).forEach(function (i) {
@@ -479,7 +479,7 @@
     ['a', 'b'].forEach(function (k) {
       var list = d.inj[k] || []; var others = k === 'a' ? d.inj.othersA : d.inj.othersB;
       box.appendChild(el('div', 'sub', d[k].name));
-      if (!list.length) { box.appendChild(el('div', 'small', 'No leading scorer or starting quarterback in doubt.' + (others ? ' ' + others + ' other listed.' : ''))); return; }
+      if (!list.length) { box.appendChild(el('div', 'small', 'No key player in doubt.' + (others ? ' ' + others + ' other listed.' : ''))); return; }
       any = true; var rows = el('div', 'rows');
       list.forEach(function (i) {
         var row = el('div'); var l = el('span', 'l', i.name + (i.pos ? ' (' + i.pos + ')' : '') + (i.part ? ', ' + i.part.toLowerCase() : ''));
