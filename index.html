@@ -1160,7 +1160,7 @@
     var st = pu.status;
     if (st && st.ok) box.appendChild(el('div', 'small', 'Logger ' + (st.last ? 'last ran ' + ago(st.last.t) : 'has not run yet') + '. ' + st.snapshots.toLocaleString() + ' price snapshots stored' + (st.since ? ' since ' + day(st.since) : '') + ', ' + st.alertsLogged + ' whale alerts logged, ' + st.phones + (st.phones === 1 ? ' phone' : ' phones') + ' signed up.'));
     else if (pu.url && st === false) box.appendChild(el('div', 'small err', 'Could not reach the logger at that address.'));
-    box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for leading scorers and starting quarterbacks, even with the app closed.'));
+    box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for top scorers and starting quarterbacks, even with the app closed.'));
   }
   function loadLogger() { renderPush(); if (!pu.url) return; lg('/status').then(function (s) { pu.status = s; renderPush(); }).catch(function () { pu.status = false; renderPush(); }); }
 

@@ -13,13 +13,17 @@ const SCHEMA = [
   'CREATE INDEX IF NOT EXISTS snaps_event_t ON snaps (event, t)',
   'CREATE TABLE IF NOT EXISTS gsnaps (t INTEGER, lg TEXT, event TEXT, state TEXT, a_bid REAL, a_ask REAL, b_bid REAL, b_ask REAL, a_score INTEGER, b_score INTEGER, period INTEGER, clock REAL, book_a REAL)',
   'CREATE INDEX IF NOT EXISTS gsnaps_event_t ON gsnaps (event, t)',
-  'CREATE TABLE IF NOT EXISTS inj (id TEXT PRIMARY KEY, lg TEXT, team TEXT, name TEXT, tag TEXT, t INTEGER)',
+  'CREATE TABLE IF NOT EXISTS inj (id TEXT PRIMARY KEY, lg TEXT, team TEXT, name TEXT, tag TEXT, t INTEGER, big INTEGER DEFAULT 0)',
   'CREATE TABLE IF NOT EXISTS injlog (t INTEGER, lg TEXT, team TEXT, name TEXT, was TEXT, now TEXT, event TEXT, mid REAL, lo REAL, hi REAL, pushed INTEGER)',
   'CREATE INDEX IF NOT EXISTS injlog_t ON injlog (t)',
   'CREATE INDEX IF NOT EXISTS alerts_t ON alerts (t)',
 ];
 let ready = false;
-async function ensure(env) { if (ready) return; await env.DB.batch(SCHEMA.map((q) => env.DB.prepare(q))); ready = true; }
+async function ensure(env) {
+  if (ready) return; await env.DB.batch(SCHEMA.map((q) => env.DB.prepare(q)));
+  try { await env.DB.prepare('ALTER TABLE inj ADD COLUMN big INTEGER DEFAULT 0').run(); } catch (e) { /* already there */ }
+  ready = true;
+}
 
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const kvGet = async (env, k) => { const r = await env.DB.prepare('SELECT v FROM kv WHERE k = ?').bind(k).first(); return r ? r.v : null; };
@@ -117,15 +121,17 @@ async function tick(env) {
     for (const g of sp.games) stmts.push(env.DB.prepare('INSERT INTO gsnaps (t, lg, event, state, a_bid, a_ask, b_bid, b_ask, a_score, b_score, period, clock, book_a) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(now, g.lg, g.event, g.state, nul(g.ab), nul(g.aa), nul(g.bb), nul(g.ba), nul(g.sa), nul(g.sb), nul(g.period), nul(g.clock), nul(g.book)));
     note.games = sp.games.length;
     const firstInj = !(await kvGet(env, 'inj_started'));
-    const known = new Map(((await env.DB.prepare('SELECT id, lg, team, name, tag FROM inj').all()).results || []).map((r) => [r.id, r]));
+    const known = new Map(((await env.DB.prepare('SELECT id, lg, team, name, tag, big FROM inj').all()).results || []).map((r) => [r.id, r]));
     const seen = new Set(); const hot = (t) => HOT.indexOf(t) >= 0; let changes = 0;
     for (const i of sp.inj || []) {
-      if (!sp.feeds || !sp.feeds[i.lg]) continue;
+      if (!sp.feeds || !sp.feeds[i.lg] || seen.has(i.id)) continue; // a team with two games coming up is listed twice
       seen.add(i.id); const was = known.get(i.id); if (was && was.tag === i.tag) continue;
-      stmts.push(env.DB.prepare('INSERT INTO inj (id, lg, team, name, tag, t) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, t = excluded.t').bind(i.id, i.lg, i.team, i.name, i.tag, now));
+      stmts.push(env.DB.prepare('INSERT INTO inj (id, lg, team, name, tag, t, big) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, t = excluded.t, big = excluded.big').bind(i.id, i.lg, i.team, i.name, i.tag, now, i.hi >= 4 ? 1 : 0));
       if (firstInj) continue;
       // a status change always counts. A name we have not seen before only counts if the report itself is recent.
-      const tell = was ? hot(was.tag) || hot(i.tag) : hot(i.tag) && i.t && now - i.t < 3 * 3600;
+      // Only players worth about 2.5 points or more reach the phone: top NBA scorers and starting quarterbacks. The rest is logged.
+      const big = i.hi >= 4;
+      const tell = big && (was ? hot(was.tag) || hot(i.tag) : hot(i.tag) && i.t && now - i.t < 3 * 3600);
       stmts.push(env.DB.prepare('INSERT INTO injlog (t, lg, team, name, was, now, event, mid, lo, hi, pushed) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, i.lg, i.team, i.name, was ? was.tag : null, i.tag, i.event, nul(i.mid), nul(i.lo), nul(i.hi), tell ? 1 : 0));
       changes++;
       if (tell) {
@@ -143,7 +149,7 @@ async function tick(env) {
       if (firstInj) continue;
       stmts.push(env.DB.prepare('INSERT INTO injlog (t, lg, team, name, was, now, event, mid, lo, hi, pushed) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, r.lg, r.team, r.name, r.tag, 'Off the report', null, null, null, null, hot(r.tag) ? 1 : 0));
       changes++;
-      if (hot(r.tag)) notes.push({ id: 'i-' + id + '-off-' + now, t: now, kind: 'injury', url: '/#' + r.lg, title: r.lg.toUpperCase() + ': ' + r.name + ' is off the injury report', body: r.team + '. Was ' + r.tag.toLowerCase() + '. Check the price before it moves.' });
+      if (hot(r.tag) && r.big) notes.push({ id: 'i-' + id + '-off-' + now, t: now, kind: 'injury', url: '/#' + r.lg, title: r.lg.toUpperCase() + ': ' + r.name + ' is off the injury report', body: r.team + '. Was ' + r.tag.toLowerCase() + '. Check the price before it moves.' });
     }
     if (firstInj && sp.feeds && (sp.feeds.nba || sp.feeds.nfl)) await kvSet(env, 'inj_started', now);
     note.injuries = (sp.inj || []).length; note.injuryChanges = changes;
