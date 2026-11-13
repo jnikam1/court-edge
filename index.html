@@ -623,6 +623,28 @@
     $('dRead').replaceChildren(v);
   }
 
+  // What the next game, break point or set would do to the fair value, and the nearest way to 80¢.
+  function pathsBox(d, box, A, B) {
+    var P = d.paths; if (!P || !P.rows || !P.rows.length) return;
+    var s = P.server, S = s === 'a' ? A : B, R = s === 'a' ? B : A;
+    var name = { game_a: s ? (s === 'a' ? A + ' holds serve' : A + ' breaks serve') : A + ' wins the next game', game_b: s ? (s === 'b' ? B + ' holds serve' : B + ' breaks serve') : B + ' wins the next game',
+      games2_a: A + ' wins the next two games', games2_b: B + ' wins the next two games', bp3: R + ' gets to 0–40 on ' + S + '’s serve', gp3: S + ' goes 40–0 up on serve', set_a: A + ' wins this set', set_b: B + ' wins this set' };
+    box.appendChild(el('div', 'sub', 'What moves it from here'));
+    var kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', A), el('span', 'h', B));
+    var row = function (k, a) { add(kv, el('span', 'k', k), el('span', 'num', cents(a)), el('span', 'num', cents(1 - a))); };
+    row('Now' + (d.points ? ', at ' + d.points.join('–') : ''), P.now);
+    P.rows.forEach(function (r) { if (name[r.k]) row(name[r.k], r.a); });
+    box.appendChild(kv);
+    // nearest single step that takes each player to 80¢ on the model
+    var order = ['gp3', 'bp3', 'game_a', 'game_b', 'games2_a', 'games2_b', 'set_a', 'set_b']; var lines = [];
+    [['a', A], ['b', B]].forEach(function (x) {
+      var cur0 = x[0] === 'a' ? P.now : 1 - P.now; if (cur0 >= 0.8 || cur0 < 0.25) return;
+      var hit = null; order.forEach(function (k) { if (hit) return; var r = P.rows.filter(function (q) { return q.k === k; })[0]; if (!r) return; var v = x[0] === 'a' ? r.a : 1 - r.a; if (v >= 0.795 && v > cur0) hit = { k: k, v: v }; });
+      lines.push(!hit ? x[1] + ' at ' + cents(cur0) + ' does not reach 80¢ from one game or this set alone.' : hit.v >= 0.995 ? x[1] + ' at ' + cents(cur0) + ' only gets past 80¢ by winning the match from here.' : x[1] + ' at ' + cents(cur0) + ' gets to 80¢ if ' + name[hit.k] + ' (' + cents(hit.v) + ').');
+    });
+    if (lines.length) { var v = el('div', 'verdict'); var ul = el('ul'); ul.style.marginTop = '0'; lines.forEach(function (t) { ul.appendChild(el('li', '', t)); }); v.appendChild(ul); box.appendChild(v); }
+    box.appendChild(el('div', 'small', 'Model values from the score' + (s ? '' : ', averaged over who serves because the server is not set') + '. They show how far each event should move the price, not how likely it is.' + (d.points ? '' : ' With a live point feed this updates on every point.')));
+  }
   function modelBox(d) {
     var box = $('dModel'); box.replaceChildren(); var m = d.model;
     var A = last(d.a.name), B = last(d.b.name);
@@ -640,6 +662,7 @@
         b.addEventListener('click', function () { cur.srv = o[0]; loadDetail(); }); seg.appendChild(b);
       });
       box.appendChild(seg);
+      pathsBox(d, box, A, B);
     } else {
       add(box, el('div', 'small', d.state === 'upcoming' ? 'The live fair value starts when the match does.' : d.score ? 'No live fair value for this state.' : 'No live score for this match, so no point-by-point fair value.'));
     }
@@ -813,8 +836,8 @@
   function renderDetail(d) {
     if (cur.kind === 'game') return;
     cur.d = d;
-    var ff = d.score && d.score.live ? feedFor(d, d.score.sets) : null; var auto = ff ? ff.server : null;
-    if (auto !== (cur.auto || null)) { cur.auto = auto; if (!cur.srv) { loadDetail(); } }
+    var ff = d.score && d.score.live ? feedFor(d, d.score.sets) : null; var auto = ff ? ff.server : null; var ap = ff && ff.points && auto ? ff.points.join('-') : null;
+    if (auto !== (cur.auto || null) || ap !== (cur.autoPts || null)) { cur.auto = auto; cur.autoPts = ap; if (!cur.srv) { loadDetail(); } }
     head(d); read(d); calc(d); modelBox(d); chart(d); flow(d); stats(d);
     var hb = $('dHist'); hb.replaceChildren();
     if (d.history && d.history.length) { var ul = el('ul', 'plain'); d.history.forEach(function (t) { ul.appendChild(el('li', '', t)); }); add(hb, ul, el('div', 'small', 'From ' + d.historyN + ' settled Kalshi matches this year and tour results since 2011. These are base rates for the spot, not a prediction for this match.')); }
@@ -827,7 +850,7 @@
     var ev = cur.event; if (!ev) return;
     if (cur.kind === 'game') { loadGame(); return; }
     var sv = cur.srv || cur.auto; var seq = cur.seq = (cur.seq || 0) + 1; // a slower, older answer must not overwrite a newer one
-    get('/api/match?event=' + encodeURIComponent(ev) + (sv ? '&srv=' + sv : '')).then(function (d) { if (ev === cur.event && seq === cur.seq) renderDetail(d); })
+    get('/api/match?event=' + encodeURIComponent(ev) + (sv ? '&srv=' + sv : '') + (!cur.srv && cur.auto && cur.autoPts ? '&pts=' + encodeURIComponent(cur.autoPts) : '')).then(function (d) { if (ev === cur.event && seq === cur.seq) renderDetail(d); })
       .catch(function (e) { if (ev === cur.event) $('dStatus').replaceChildren(el('span', 'err', e.message + (cur.d ? ' Showing the last data.' : ''))); });
   }
   function loadWhales() {
