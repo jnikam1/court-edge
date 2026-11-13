@@ -12,7 +12,7 @@ self.addEventListener('push', (e) => {
         const k = (x) => '$' + (x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : Math.round(x / 1000) + 'k');
         title = a.whale + (a.fresh ? ' opened ' : ' added ') + k(a.added) + ' on ' + (a.outcome || 'one side');
         body = a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + k(a.stake) + '.' + (d.alerts.length > 1 ? ' ' + (d.alerts.length - 1) + ' more in the app.' : '');
-      }
+      } else if (d && d.alerts) { title = 'Court Edge test'; body = 'Phone alerts are working. No big whale add right now.'; }
     } catch (err) { /* keep the plain text */ }
     await self.registration.showNotification(title, { body, tag: 'whale-alert', renotify: true, icon: '/icon-180.png', data: { url: '/#whales' } });
   })());
