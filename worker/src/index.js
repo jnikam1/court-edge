@@ -133,6 +133,7 @@ export default {
       }
       if (url.pathname === '/unsubscribe' && req.method === 'POST') { const b = await req.json(); await env.DB.prepare('DELETE FROM subs WHERE endpoint = ?').bind(String(b && b.endpoint)).run(); return json({ ok: true }); }
       if (url.pathname === '/test' && req.method === 'POST') return json(await pushAll(env));
+      if (url.pathname === '/run' && req.method === 'POST') return json(await tick(env)); // one pass on demand, for checking
       if (url.pathname === '/alerts') { const r = await env.DB.prepare('SELECT * FROM alerts ORDER BY t DESC LIMIT 100').all(); return json({ alerts: r.results || [] }); }
       if (url.pathname === '/snaps') { // price history for one match
         const ev = url.searchParams.get('event'); if (!ev) return json({ error: 'event required' }, 400);
