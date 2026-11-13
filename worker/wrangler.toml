@@ -1,6 +1,6 @@
 # Court Edge logger: runs every minute on Cloudflare, stores history in D1, sends phone alerts.
 # Deployed by .github/workflows/deploy-logger.yml on every change under worker/. The Cloudflare
-# token needs Workers Scripts Write and D1 Write.
+# token needs Workers Scripts Read and Write, and D1 Read and Write.
 name = "court-edge-logger"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
