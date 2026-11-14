@@ -1299,9 +1299,17 @@
   function alertCard(a) {
     var c = el('button', 'bet'); c.type = 'button';
     var who = el('div', 'who'); add(who, el('b', '', a.whale), el('span', '', ago(a.last)));
-    add(c, el('span', 'av', a.whale.replace(/^0x/, '').charAt(0)), who, el('div', 'bet-t', (a.fresh ? 'Opened ' : 'Added ') + usd(a.added) + ' on ' + (a.outcome || 'one side')), el('div', 'sub', a.title),
+    add(c, el('span', 'av', a.whale.replace(/^0x/, '').charAt(0)), who, el('div', 'bet-t', a.lean === 'against' ? 'Hedged with ' + usd(a.added) + ' of ' + (a.outcome || 'one side') : (a.fresh ? 'Opened ' : 'Added ') + usd(a.added) + ' on ' + (a.outcome || 'one side')), el('div', 'sub', a.title),
       trio([['Bought at', cents(a.paid)], ['Stake now', usd(a.stake)], ['Price now', has(a.cur) ? cents(a.cur) : '–', !has(a.cur) || Math.abs(a.cur - a.paid) < 0.005 ? '' : a.cur > a.paid ? 'up' : 'down']]));
+    // one buy is not the whole bet: say so when the wallet holds as much or more the other way
+    var n = a.net; var side = a.outcome || 'this side';
+    if (n && a.lean !== 'for') {
+      var leg = n.legs.filter(function (x) { return x.dir < 0; })[0]; var w = el('div', 'flag');
+      add(w, icon('alert'), el('span', '', (a.lean === 'against' ? 'This is a hedge, not a bet on ' + side + '. ' : 'Partly hedged. ') + 'The wallet is paid ' + usd(n.for) + ' if ' + side + ' wins and ' + usd(n.against) + ' if not' + (leg ? ', mostly through ' + leg.outcome + ' on "' + leg.title + '"' : '') + '.' + (a.lean === 'against' ? ' Its real position is against ' + side + '.' : '')));
+      c.appendChild(w);
+    }
     var foot = el('div', 'foot'); foot.appendChild(el('span', 'chip good', a.cat + ' record ' + signed(a.rec.net) + (a.rec.n ? ' over ' + a.rec.n : '')));
+    if (a.lean === 'against') foot.appendChild(el('span', 'chip', 'Hedge'));
     if (al.fresh[a.id]) foot.appendChild(el('span', 'chip window', 'New'));
     c.appendChild(foot);
     c.addEventListener('click', function () { openSheet(alertBet(a), { whales: [{ name: a.whale }] }); });

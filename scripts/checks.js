@@ -71,6 +71,23 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     assert.strictEqual(restPrice({ bid: 0.49, ask: 0.50 }), 0.49); assert.strictEqual(restPrice({ bid: 0.45, ask: 0.50 }), 0.46); assert.strictEqual(restPrice({ bid: null, ask: 0.5 }), null);
   });
 
+  await check('whale alerts: a buy smaller than what the wallet holds against it is called a hedge', () => {
+    const { netExposure } = require('../lib/alerts'); const O = (o) => Object.assign({ status: 'OPEN' }, o);
+    // the real case: bought Gen.G in the final while holding more "Gen.G does not win Worlds" and Bilibili
+    const p = O({ condition_id: 'm', outcome: 'Gen.G', outcome_index: 1, opposite_outcome: 'Bilibili Gaming', current_size: 202635, current_price: 0.565 });
+    const book = [p, O({ condition_id: 'm', outcome: 'Bilibili Gaming', outcome_index: 0, current_size: 123653, current_price: 0.435, title: 'LoL: Bilibili Gaming vs Gen.G (BO5)' }),
+      O({ condition_id: 'w1', title: 'Will Gen.G win Worlds 2026?', outcome: 'No', current_size: 330104, current_price: 0.435 }), O({ condition_id: 'w1', title: 'Will Gen.G win Worlds 2026?', outcome: 'Yes', current_size: 3288, current_price: 0.565 }),
+      O({ condition_id: 'w2', title: 'Will Bilibili Gaming win Worlds 2026?', outcome: 'Yes', current_size: 11338, current_price: 0.4435 }), O({ condition_id: 'w2', title: 'Will Bilibili Gaming win Worlds 2026?', outcome: 'No', current_size: 15880, current_price: 0.5565 }),
+      O({ condition_id: 'old', title: 'Will Gen.G win Worlds 2026?', outcome: 'No', current_size: 999999, current_price: 0.4, status: 'REDEEMABLE' })];
+    const n = netExposure(p, book); assert.strictEqual(n.for, 202635 + 3288); assert.strictEqual(n.against, 123653 + 330104 + 11338); assert.strictEqual(n.lean, 'against'); assert.strictEqual(n.legs[0].outcome, 'No');
+    assert.strictEqual(netExposure(p, [p]).lean, 'for', 'nothing held the other way');
+    assert.strictEqual(netExposure(p, [p, book[1]]).lean, 'hedged', 'more than half covered, but still net for');
+    // a title future far from the match price is a different bet, not a hedge of tonight's game
+    const lal = O({ condition_id: 'g', outcome: 'Lakers', outcome_index: 0, opposite_outcome: 'Suns', current_size: 100000, current_price: 0.6 });
+    assert.strictEqual(netExposure(lal, [lal, O({ condition_id: 'f', title: 'Will Los Angeles Lakers win the 2027 NBA Finals?', outcome: 'No', current_size: 500000, current_price: 0.95 })]).lean, 'for');
+    assert.strictEqual(netExposure(O({ outcome: 'Yes', current_size: 1 }), []), null, 'yes or no markets are left alone');
+  });
+
   // alerts and tracked positions in the page
   await check('page: a stop needs a real two-sided quote, and a position is valued on its own venue', () => {
     const js = fs.readFileSync(path.join(root, 'assets', 'app.js'), 'utf8'); const line = (re) => { const m = re.exec(js); assert.ok(m, 'not found: ' + re); return m[0]; };

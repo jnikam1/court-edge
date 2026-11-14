@@ -139,7 +139,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
       why: n.i.name + ' (' + n.i.teamName + ') ' + (n.fade ? 'is ' + n.i.tag.toLowerCase() : 'is cleared') + '. Tracks where the price is 5, 15 and 20 minutes later.' });
   }
   // wallet analyst: every big add, followed for an hour at the price we saw it
-  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
+  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97 && a.lean !== 'against') found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
   // open the new ones
   let opened = 0;
   if (found.length) {
@@ -208,7 +208,8 @@ async function tick(env) {
       fresh++; newAdds.push(a);
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
-      notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side'), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
+      if (a.lean === 'against') continue; // a hedge: the wallet holds more against this side than for it, so it is logged but not sent as a bet
+      notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + (a.lean === 'hedged' ? ' (partly hedged)' : ''), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
     }
     note.alerts = al.alerts.length; note.fresh = fresh;
   } else note.alertError = al && al.error;
