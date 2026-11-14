@@ -112,7 +112,7 @@
     if (r && r.remote) withSub(function (sub) { if (sub) lg('/rules/delete', { endpoint: sub.endpoint, id: id }).catch(function () {}); });
   }
   // Current prices for a set of events, from the same lists the Discover tab uses.
-  var Q = { t: 0, by: {}, at: {}, pm: {} };
+  var Q = { t: 0, by: {}, at: {}, pm: {}, dt: {} };
   var feedOf = function (ev) { return leagueOf(ev) || 't'; };
   var detailUrl = function (ev) { var l = leagueOf(ev); return l ? '/api/sports?league=' + l + '&event=' + encodeURIComponent(ev) : '/api/match?event=' + encodeURIComponent(ev); };
   function quotes(events, pmEvents) {
@@ -120,8 +120,8 @@
     var calls = [];
     if (need.t) calls.push(get('/api/scan').then(function (d) { (d.matches || []).forEach(function (m) { Q.by[m.event] = m; }); Q.at.t = Date.now(); }).catch(function () {}));
     ['nba', 'nfl'].forEach(function (l) { if (need[l]) calls.push(get('/api/sports?league=' + l).then(function (d) { (d.games || []).forEach(function (m) { Q.by[m.event] = m; }); Q.at[l] = Date.now(); }).catch(function () {})); });
-    // Polymarket has no list feed here, so a position held there reads its quote from the matchup itself.
-    (pmEvents || []).forEach(function (ev) { calls.push(get(detailUrl(ev)).then(function (d) { var pm = d.pm || d.polymarket; Q.pm[ev] = { bid: pm && pm.bid ? pm.bid : null, t: Date.now() }; }).catch(function () {})); });
+    // A held position also reads its matchup: the model's live estimate, and the Polymarket quote (which has no list feed here).
+    (pmEvents || []).forEach(function (ev) { calls.push(get(detailUrl(ev)).then(function (d) { var pm = d.pm || d.polymarket; Q.pm[ev] = { bid: pm && pm.bid ? pm.bid : null, t: Date.now() }; Q.dt[ev] = { model: d.model && d.model.live && has(d.model.live.a) ? d.model.live.a : null, t: Date.now() }; }).catch(function () {})); });
     return Promise.all(calls).then(function () { Q.t = Date.now(); return Q.by; });
   }
   // While the app is open, check price alerts here too, so the banner shows without waiting for the logger's minute.
@@ -1029,7 +1029,7 @@
     var sp = h === '#nba' ? 'nba' : h === '#nfl' ? 'nfl' : h === '#tennis' ? 'tennis' : null; // old links to one sport
     if (sp) { D.sport = sp; try { localStorage.setItem('ce-sport2', sp); } catch (e) {} location.replace('#'); return; }
     if (h === '#whales') { show('whalesView'); openWhales(); badge(); backTo(h); return; }
-    if (h === '#alerts') { show('alertsView'); mine = 0; renderRules(); renderAlerts(); badge(); loadLogger(); pullRules(); loadInjuries(); setTimeout(function () { al.fresh = {}; }, 60000); backTo(h); return; }
+    if (h === '#alerts') { show('alertsView'); mine = 0; renderRules(); renderAlerts(); badge(); loadLogger(); pullRules(); loadSignals(); loadInjuries(); setTimeout(function () { al.fresh = {}; }, 60000); backTo(h); return; }
     if (h === '#watch') { show('watchView'); loadWatch(); badge(); backTo(h); return; }
     if (h === '#positions') { show('positionsView'); renderJournal(); badge(); backTo(h); return; }
     show('discoverView'); drawFilters(); renderDiscover(); loadDiscover(); badge(); backTo(h);
@@ -1115,6 +1115,9 @@
     if (has(bid) && has(sq.size) && sq.size < x.qty) flags.push('Only ' + Math.floor(sq.size) + ' of your ' + x.qty + ' contracts are bid at ' + cents(bid) + '. The rest would sell lower.');
     else if (has(bid) && !has(sq.size)) flags.push('Size available at this price is not known for ' + VENUES[v] + '.');
     flags.forEach(function (f) { var w = el('div', 'flag'); add(w, icon('alert'), el('span', '', f)); c.appendChild(w); });
+    // hold or sell: the live model's estimate against what selling pays right now
+    var dt = Q.dt[x.event]; var mf = dt && has(dt.model) && Date.now() - dt.t < 180000 ? (x.side === 'a' ? dt.model : 1 - dt.model) : null;
+    if (has(mf) && has(bid)) c.appendChild(el('div', 'small', 'Model estimate: ' + pct0(mf) + ' to win, so holding is worth about ' + cents(mf) + ' a contract. Selling now pays ' + cents(bid) + '. ' + (bid - mf >= 0.03 ? 'By the model, selling now is the better side.' : mf - bid >= 0.03 ? 'By the model, holding is the better side.' : 'By the model it is about even.')));
     if (has(tgt) || has(stp)) {
       var kv = el('div', 'kv');
       var line = function (label, price, op) { var at = x.qty * price - feeAt(v, price, x.qty) - x.cost; var hit = has(bid) && (op === 'bid>=' ? bid >= price - 1e-9 : bid <= price + 1e-9); var r = ruleFor(op);
@@ -1155,7 +1158,7 @@
     add(box, go, el('div', 'small', v === 'kalshi' ? 'Saving sets a price alert at each level. Nothing is sent to Kalshi and no order is placed.' : 'Kept as a note only. Alerts watch Kalshi prices, so there is no alert for a Polymarket position.'));
     openSheetNow();
   }
-  var pmHeld = function (open) { return open.filter(function (x) { return venueOf(x) === 'polymarket'; }).map(function (x) { return x.event; }); };
+  var pmHeld = function (open) { var seen = {}; return open.map(function (x) { return x.event; }).filter(function (e) { if (seen[e]) return false; seen[e] = 1; return true; }).slice(0, 8); };
   function posTick() { var open = J.filter(function (x) { return x.status === 'open'; }); if (open.length) quotes(open.map(function (x) { return x.event; }), pmHeld(open)).then(function () { if (location.hash === '#positions') renderJournal(true); }); }
   function renderJournal(noFetch) {
     var typing = document.activeElement && document.activeElement.tagName === 'INPUT' && $('positionsView').contains(document.activeElement);
@@ -1239,6 +1242,30 @@
     else if (pu.url && st === false) box.appendChild(el('div', 'small err', 'Could not reach the alert server just now. Phone alerts cannot be turned on or tested until it answers.'));
     box.appendChild(adv);
     box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for top scorers and starting quarterbacks, even with the app closed.'));
+  }
+  // The decision engine's record: each setup's closed paper trades, then the latest ones.
+  function loadSignals() {
+    var box = $('sigBox'); if (!pu.url) { box.replaceChildren(el('div', 'empty', 'Needs the alert server address, under Advanced below.')); return; }
+    lg('/signals').then(function (d) {
+      box.replaceChildren(); var sg = function (x) { return (x >= 0 ? '+' : '') + x + '¢'; };
+      if (d.error) box.appendChild(el('div', 'small err', 'The engine hit an error on its last run: ' + d.error));
+      (d.summary || []).forEach(function (s) {
+        var c = el('div', 'card'); var top = el('div', 'top'); top.appendChild(el('b', '', s.label));
+        top.appendChild(el('span', 'chip' + (s.n && s.avg > 0 ? ' good' : ''), s.n ? sg(s.avg) + ' a contract' : 'No closed trades yet'));
+        add(c, top, el('div', 'small', (s.n ? s.n + ' closed, ' + s.won + ' reached the target or won' + (s.m15 !== null ? ', price ' + sg(s.m15) + ' after 15 min' : '') + '. ' : '') + (s.open ? s.open + ' open now. ' : '') + s.basis)); box.appendChild(c);
+      });
+      var rows = (d.signals || []).slice(0, 12);
+      if (rows.length) box.appendChild(el('div', 'list-head', 'Latest paper trades'));
+      rows.forEach(function (r) {
+        var c = el('div', 'card'); var top = el('div', 'top'); var a = el('a', 'lnk'); a.href = r.url ? r.url.replace(/^\//, '') : '#alerts'; a.appendChild(el('b', '', r.name + ' at ' + cents(r.entry)));
+        var st = r.status === 'open' ? 'Open' + (r.target ? ', sell at ' + cents(r.target) : '') : (r.status === 'target' ? 'Target hit' : r.status === 'settled' ? (r.exit === 1 ? 'Won' : 'Lost') : r.status === 'invalid' ? 'Cancelled' : r.status === 'void' ? 'No quote' : 'Timed out') + (r.net !== null && r.status !== 'void' ? ' ' + sg(r.net) : '');
+        add(top, a, el('span', 'chip' + (r.status === 'open' ? ' live' : r.net > 0 ? ' good' : ''), st));
+        add(c, top, el('div', 'small', r.title + ' · ' + ago(r.t)), el('div', 'small', r.why)); box.appendChild(c);
+      });
+      var wg = (d.whales || []).filter(function (w) { return w.n >= 3; }).slice(0, 6);
+      if (wg.length) { box.appendChild(el('div', 'list-head', 'Whales whose adds moved the price their way (next hour)')); wg.forEach(function (w) { var c = el('div', 'card'); var top = el('div', 'top'); add(top, el('b', '', w.whale + ', ' + w.cat), el('span', 'chip' + (w.grade > 0 ? ' good' : ''), sg(w.grade) + ' graded')); add(c, top, el('div', 'small', w.n + ' adds seen, average ' + sg(w.avg) + ' in the hour after. Small samples are pulled toward the average for that sport.')); box.appendChild(c); }); }
+      if (!box.children.length) box.appendChild(el('div', 'empty', 'Nothing recorded yet.'));
+    }).catch(function () { box.replaceChildren(el('div', 'empty', 'Could not reach the alert server for the record. It will retry when you reopen this tab.')); });
   }
   function loadInjuries() {
     var box = $('iList'); if (!pu.url) { box.replaceChildren(el('div', 'small', 'Needs the logger address in the box above.')); return; }

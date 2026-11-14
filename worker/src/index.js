@@ -1,3 +1,4 @@
+import { SETUPS, gameSignals, tennisSignals, manage, summarize, whaleGrades, cents } from './brain.js';
 // Court Edge logger (Cloudflare Worker).
 // Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
 // in play and each NBA or NFL game near its start, record new big whale adds and injury report
@@ -18,6 +19,10 @@ const SCHEMA = [
   'CREATE INDEX IF NOT EXISTS injlog_t ON injlog (t)',
   'CREATE TABLE IF NOT EXISTS rules (id TEXT PRIMARY KEY, endpoint TEXT, ticker TEXT, title TEXT, op TEXT, price REAL, url TEXT, created INTEGER, fired INTEGER)',
   'CREATE INDEX IF NOT EXISTS rules_fired ON rules (fired)',
+  // every plan the decision engine opens, as a paper trade, and how it ended
+  'CREATE TABLE IF NOT EXISTS signals (id TEXT PRIMARY KEY, t INTEGER, setup TEXT, lg TEXT, event TEXT, side TEXT, name TEXT, ticker TEXT, title TEXT, url TEXT, entry REAL, target REAL, deadline INTEGER, model REAL, why TEXT, ctx TEXT, status TEXT, exit REAL, exit_t INTEGER, net REAL, m5 REAL, m15 REAL, hi REAL, lo REAL, last REAL)',
+  'CREATE INDEX IF NOT EXISTS signals_status ON signals (status)',
+  'CREATE INDEX IF NOT EXISTS signals_t ON signals (t)',
   'CREATE INDEX IF NOT EXISTS alerts_t ON alerts (t)',
 ];
 let ready = false;
@@ -114,6 +119,56 @@ const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x)
 const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
 const getJson = async (url) => { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error(url.split('/api/')[1] + ' ' + r.status); return r.json(); };
 
+const COLS = ['id', 't', 'setup', 'lg', 'event', 'side', 'name', 'ticker', 'title', 'url', 'entry', 'target', 'deadline', 'model', 'why', 'ctx', 'status'];
+async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
+  const found = []; const games = (sp && sp.games) || []; const byEvent = new Map(games.map((g) => [g.event, g]));
+  const matches = (scan && scan.matches) || []; const byMatch = new Map(matches.map((m) => [m.event, m]));
+  // game analyst: live NBA and NFL games against the price before the start and the minute before
+  const live = games.filter((g) => g.state === 'live').slice(0, 40);
+  if (live.length) {
+    const evs = live.map((g) => g.event); const qs = evs.map(() => '?').join(',');
+    const pre = new Map((((await env.DB.prepare("SELECT event, a_bid, a_ask, MAX(t) t FROM gsnaps WHERE state = 'upcoming' AND event IN (" + qs + ') GROUP BY event').bind(...evs).all()).results) || []).map((r) => [r.event, r]));
+    const prev = new Map(); for (const r of ((await env.DB.prepare('SELECT * FROM gsnaps WHERE t >= ? AND t < ? AND event IN (' + qs + ') ORDER BY t DESC').bind(now - 150, now, ...evs).all()).results) || []) if (!prev.has(r.event)) prev.set(r.event, r);
+    for (const g of live) { const p = pre.get(g.event); const preA = p && p.a_bid !== null && p.a_ask !== null && p.a_ask > 0 ? (p.a_bid + p.a_ask) / 2 : null; found.push(...gameSignals(g, prev.get(g.event) || null, preA, now)); }
+  }
+  for (const m of matches) found.push(...tennisSignals(m, now));
+  // news analyst: a key player ruled out (back the other side) or cleared (back his side), only when the game is quoted
+  for (const n of news) {
+    const g = byEvent.get(n.i.event); if (!g) continue; const mine = g.a === n.i.team ? 'a' : 'b'; const k = n.fade ? (mine === 'a' ? 'b' : 'a') : mine; const ask = k === 'a' ? g.aa : g.ba; if (!(ask > 0.03 && ask < 0.97)) continue;
+    found.push({ id: 'injury_news|' + n.i.id + '|' + n.i.tag, setup: 'injury_news', lg: g.lg, event: g.event, side: k, name: k === 'a' ? g.an || g.a : g.bn || g.b, ticker: k === 'a' ? g.at : g.bt, title: (g.an || g.a) + ' v ' + (g.bn || g.b), url: '/#m=' + g.event, entry: ask, target: null, deadline: now + 20 * 60, model: null, t: now,
+      why: n.i.name + ' (' + n.i.teamName + ') ' + (n.fade ? 'is ' + n.i.tag.toLowerCase() : 'is cleared') + '. Tracks where the price is 5, 15 and 20 minutes later.' });
+  }
+  // wallet analyst: every big add, followed for an hour at the price we saw it
+  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
+  // open the new ones
+  let opened = 0;
+  if (found.length) {
+    const ids = [...new Set(found.map((f) => f.id))].slice(0, 90); const have = new Set((((await env.DB.prepare('SELECT id FROM signals WHERE id IN (' + ids.map(() => '?').join(',') + ')').bind(...ids).all()).results) || []).map((r) => r.id));
+    for (const f of found) {
+      if (have.has(f.id) || !(f.entry > 0 && f.entry < 1)) continue; have.add(f.id); opened++;
+      const row = Object.assign({}, f, { ctx: f.ctx ? JSON.stringify(f.ctx) : null, status: 'open', why: String(f.why || '').slice(0, 400), title: String(f.title || '').slice(0, 160) });
+      await env.DB.prepare('INSERT OR IGNORE INTO signals (' + COLS.join(', ') + ') VALUES (' + COLS.map(() => '?').join(',') + ')').bind(...COLS.map((c) => nul(row[c]))).run();
+      const S = SETUPS[f.setup]; if (S && S.push) notes.push({ id: 's-' + f.id, t: now, kind: 'signal', url: f.url, title: f.name + ' ' + cents(f.entry) + ': ' + S.label, body: f.why + ' ' + S.basis + ' Opened as a paper trade.' });
+    }
+  }
+  // position controller: every open paper trade against this minute's quote
+  const open = ((await env.DB.prepare("SELECT * FROM signals WHERE status = 'open' ORDER BY t LIMIT 300").all()).results) || []; let closed = 0;
+  for (const sg of open) {
+    if (sg.t === now) continue; // opened this minute
+    let q = null; let skip = false; sg.ctx = sg.ctx ? JSON.parse(sg.ctx) : null;
+    if (sg.setup === 'whale_add') { if (!al || !al.alerts) skip = true; else { const a = al.alerts.find((x) => x.id === sg.event); if (a) q = { bid: a.cur, ask: a.cur }; } }
+    else if (sg.lg === 'tennis') { if (!scan || !scan.matches) skip = true; else { const m = byMatch.get(sg.event); if (m) q = { bid: m[sg.side].bid, ask: m[sg.side].ask, state: m.state, sets: m.pm && m.pm.sets ? m.pm.sets.length : null }; } }
+    else if (!sp || !sp.games) skip = true;
+    else { const g = byEvent.get(sg.event); if (g) q = { bid: sg.side === 'a' ? g.ab : g.bb, ask: sg.side === 'a' ? g.aa : g.ba, state: g.state, behind: g.sa === null || g.sa === undefined || g.sb === null || g.sb === undefined ? null : (sg.side === 'a' ? g.sb - g.sa : g.sa - g.sb) }; }
+    if (skip) continue; // that feed did not answer this minute: leave the trade as it is
+    const up = manage(sg, q, now); const keys = Object.keys(up); if (!keys.length) continue;
+    await env.DB.prepare('UPDATE signals SET ' + keys.map((k) => k + ' = ?').join(', ') + ' WHERE id = ?').bind(...keys.map((k) => nul(up[k])), sg.id).run();
+    if (up.status) { closed++; const S = SETUPS[sg.setup];
+      if (S && S.push && (up.status === 'target' || up.status === 'invalid')) notes.push({ id: 'x-' + sg.id, t: now, kind: 'signal', url: sg.url || '/#alerts', title: sg.name + (up.status === 'target' ? ' reached the target, ' + cents(up.exit) : ': plan cancelled at ' + cents(up.exit)), body: S.label + '. Paper trade from ' + cents(sg.entry) + (up.net !== null ? ', ' + (up.net >= 0 ? '+' : '') + up.net + '¢ a contract after fees.' : '.') }); }
+  }
+  return { found: found.length, opened, open: open.length, closed };
+}
+
 async function tick(env) {
   await ensure(env);
   const now = Math.floor(Date.now() / 1000); const note = { t: now };
@@ -145,12 +200,12 @@ async function tick(env) {
     note.snaps = stmts.length;
   } else note.scanError = scan && scan.error;
   // 2) new big whale adds
-  let fresh = 0;
+  let fresh = 0; const newAdds = []; const news = [];
   if (al && al.alerts) {
     for (const a of al.alerts) {
       const seen = await env.DB.prepare('SELECT last FROM sent WHERE id = ?').bind(a.id).first();
       if (seen && seen.last >= a.last) continue;
-      fresh++;
+      fresh++; newAdds.push(a);
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
       notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side'), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
@@ -178,6 +233,7 @@ async function tick(env) {
       const tell = big && (was ? hot(was.tag) || hot(i.tag) : hot(i.tag) && i.t && now - i.t < 3 * 3600);
       stmts.push(env.DB.prepare('INSERT INTO injlog (t, lg, team, name, was, now, event, mid, lo, hi, pushed) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, i.lg, i.team, i.name, was ? was.tag : null, i.tag, i.event, nul(i.mid), nul(i.lo), nul(i.hi), tell ? 1 : 0));
       changes++;
+      if (tell && (i.tag === 'Out' || i.tag === 'Doubtful' || (was && hot(was.tag) && !hot(i.tag)))) news.push({ i, fade: hot(i.tag) });
       if (tell) {
         const mins = i.start ? Math.round((i.start - now) / 60) : null; const when = mins === null ? '' : mins >= 90 ? ', starts in ' + Math.round(mins / 60) + 'h' : ', starts in ' + Math.max(0, mins) + ' min';
         notes.push({ id: 'i-' + i.id + '-' + i.tag + '-' + now, t: now, kind: 'injury', url: '/#m=' + i.event,
@@ -199,6 +255,8 @@ async function tick(env) {
     note.injuries = (sp.inj || []).length; note.injuryChanges = changes;
   } else note.sportsError = sp && sp.error;
   for (let k = 0; k < stmts.length; k += 50) await env.DB.batch(stmts.slice(k, k + 50));
+  // 3b) the decision engine: open paper trades for new setups, and manage the ones already open
+  try { note.signals = await runBrain(env, now, scan, sp, al, first ? [] : newAdds, news, notes); } catch (e) { note.brainError = String(e && e.message); }
   // 4) tell the phone. The push itself is empty, so the text is left where the phone can fetch it.
   if (notes.length) {
     const old = JSON.parse((await kvGet(env, 'notes')) || '[]');
@@ -282,6 +340,11 @@ export default {
       if (url.pathname === '/probe') { // can the logger reach Kalshi's quotes? Used to check price alerts end to end.
         try { const r = await fetch(KALSHI + '/markets?limit=1&status=open&series_ticker=KXNBAGAME', { headers: { Accept: 'application/json' } }); const d = r.ok ? await r.json() : null; const m = d && d.markets && d.markets[0]; return json({ kalshi: r.status, sample: m ? { ticker: m.ticker, bid: m.yes_bid_dollars, ask: m.yes_ask_dollars, status: m.status } : null }); }
         catch (e) { return json({ kalshi: 0, error: String(e && e.message) }); }
+      }
+      if (url.pathname === '/signals') { // the engine's scoreboard and its latest paper trades
+        const rows = ((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || [];
+        const last = await kvGet(env, 'last'); const ln = last ? JSON.parse(last) : null;
+        return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), signals: rows.filter((r) => r.setup !== 'whale_add' && r.setup !== 'injury_news').slice(0, 40), tracked: rows.filter((r) => r.setup === 'whale_add' || r.setup === 'injury_news').slice(0, 30) });
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
       if (url.pathname === '/games') { // price and score history for one NBA or NFL game

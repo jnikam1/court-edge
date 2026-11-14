@@ -37,3 +37,9 @@ Never put the key in the code or the page.
 ## Run and check locally
 - `node scripts/dev.js` serves the page and the `api/` handlers on http://localhost:4173.
 - `npm test` runs the checks in `scripts/checks.js`.
+
+## The decision engine
+`worker/src/brain.js` holds the trading setups as pure functions. Once a minute the logger runs them on every live game and match, opens a paper trade when one fires, manages it (target, deadline, cancel, settlement) and scores it. The record is at `/signals` on the logger and under Trade setups in the Alerts tab.
+- `nfl_dog_lead`: a game priced close before kick-off where the underdog's price crosses 62¢. Sell at 80¢. Backed by 137 past games.
+- `nba_recovery`, `score_follow`, `tennis_reprice`: new, no record yet. They exist so the record can say whether they work.
+- `injury_news`, `whale_add`: not trades to copy. They measure how the price moves after late injury news and after a big whale add, and grade each whale by sport.
