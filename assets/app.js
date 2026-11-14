@@ -1299,6 +1299,15 @@
   function alertCard(a) {
     var c = el('button', 'bet'); c.type = 'button';
     var who = el('div', 'who'); add(who, el('b', '', a.whale), el('span', '', ago(a.last)));
+    if (a.grouped) { // one card for the wallet's whole position on this match
+      var g = a.net; var weak = a.lean === 'hedged';
+      add(c, who, el('div', 'bet-t', (weak ? 'Leans ' : 'On ') + a.outcome + (weak ? ', but works both sides' : '')), el('div', 'sub', a.title),
+        trio([['Paid if ' + last(a.outcome) + ' win', usd(g.for)], ['Paid if ' + last(a.other) + ' win', usd(g.against)], [last(a.outcome) + ' now', has(a.cur) ? cents(a.cur) : '–']]),
+        el('div', 'small', 'Bought in the last 3 hours: ' + g.adds.map(function (x) { return usd(x.usd) + ' of ' + x.outcome + ' at ' + cents(x.paid); }).join(', ') + '.'));
+      if (weak || a.quiet) { var fw = el('div', 'flag'); add(fw, icon('alert'), el('span', '', (a.quiet ? 'Its latest buying was on ' + a.other + ', the smaller side, so it is cutting this position, not adding to it. ' : '') + (weak ? 'The two payouts are close, so this is a weak lean. Wallets that buy both sides are often making the market, not picking a winner.' : ''))); c.appendChild(fw); }
+      var gf = el('div', 'foot'); gf.appendChild(el('span', 'chip good', a.cat + ' record ' + signed(a.rec.net) + (a.rec.n ? ' over ' + a.rec.n : ''))); if (al.fresh[a.id]) gf.appendChild(el('span', 'chip window', 'New')); c.appendChild(gf);
+      c.addEventListener('click', function () { openSheet(alertBet(a), { whales: [{ name: a.whale }] }); }); return c;
+    }
     add(c, el('span', 'av', a.whale.replace(/^0x/, '').charAt(0)), who, el('div', 'bet-t', a.lean === 'against' ? 'Hedged with ' + usd(a.added) + ' of ' + (a.outcome || 'one side') : (a.fresh ? 'Opened ' : 'Added ') + usd(a.added) + ' on ' + (a.outcome || 'one side')), el('div', 'sub', a.title),
       trio([['Bought at', cents(a.paid)], ['Stake now', usd(a.stake)], ['Price now', has(a.cur) ? cents(a.cur) : '–', !has(a.cur) || Math.abs(a.cur - a.paid) < 0.005 ? '' : a.cur > a.paid ? 'up' : 'down']]));
     // one buy is not the whole bet: say so when the wallet holds as much or more the other way
@@ -1308,6 +1317,7 @@
       add(w, icon('alert'), el('span', '', (a.lean === 'against' ? 'This is a hedge, not a bet on ' + side + '. ' : 'Partly hedged. ') + 'The wallet is paid ' + usd(n.for) + ' if ' + side + ' wins and ' + usd(n.against) + ' if not' + (leg ? ', mostly through ' + leg.outcome + ' on "' + leg.title + '"' : '') + '.' + (a.lean === 'against' ? ' Its real position is against ' + side + '.' : '')));
       c.appendChild(w);
     }
+    if (a.series) c.appendChild(el('div', 'small', 'This is a side market. On the match itself this wallet is paid ' + usd(a.series.for) + ' if ' + a.series.lead + ' win and ' + usd(a.series.against) + ' if ' + a.series.other + ' win.'));
     var foot = el('div', 'foot'); foot.appendChild(el('span', 'chip good', a.cat + ' record ' + signed(a.rec.net) + (a.rec.n ? ' over ' + a.rec.n : '')));
     if (a.lean === 'against') foot.appendChild(el('span', 'chip', 'Hedge'));
     if (al.fresh[a.id]) foot.appendChild(el('span', 'chip window', 'New'));

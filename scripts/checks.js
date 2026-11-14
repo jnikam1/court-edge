@@ -88,6 +88,21 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     assert.strictEqual(netExposure(O({ outcome: 'Yes', current_size: 1 }), []), null, 'yes or no markets are left alone');
   });
 
+  await check('whale alerts: one wallet buying both sides of a match becomes one card with its net position', () => {
+    const { seriesBook, group } = require('../lib/alerts'); const ev = 'lol-blg-gen-2026-11-14'; const O = (o) => Object.assign({ status: 'OPEN', avg_price: 0.5 }, o);
+    const book = [O({ condition_id: 'm', event_slug: ev, slug: ev, title: 'LoL: Bilibili Gaming vs Gen.G (BO5)', outcome: 'Gen.G', opposite_outcome: 'Bilibili Gaming', current_size: 313044, current_price: 0.585 }),
+      O({ condition_id: 'm', event_slug: ev, slug: ev, title: 'LoL: Bilibili Gaming vs Gen.G (BO5)', outcome: 'Bilibili Gaming', opposite_outcome: 'Gen.G', current_size: 252575, current_price: 0.415 }),
+      O({ event_slug: 'worlds-2026-winner', slug: 'will-genptg-win-worlds-2026', title: 'Will Gen.G win Worlds 2026?', outcome: 'No', current_size: 330627, current_price: 0.42 }), O({ event_slug: 'worlds-2026-winner', slug: 'will-genptg-win-worlds-2026', title: 'Will Gen.G win Worlds 2026?', outcome: 'Yes', current_size: 14004, current_price: 0.58 }),
+      O({ event_slug: 'worlds-2026-winner', slug: 'b', title: 'Will Bilibili Gaming win Worlds 2026?', outcome: 'No', current_size: 16838, current_price: 0.593 }), O({ event_slug: 'worlds-2026-winner', slug: 'b', title: 'Will Bilibili Gaming win Worlds 2026?', outcome: 'Yes', current_size: 15915, current_price: 0.407 }),
+      O({ event_slug: ev, slug: ev + '-game2', title: 'Game 2 Winner', outcome: 'Bilibili Gaming', opposite_outcome: 'Gen.G', current_size: 760131, current_price: 1 })];
+    const sb = seriesBook(book, ev); assert.strictEqual(Math.round(sb.pay['Gen.G']), 313044 + 14004 + 16838); assert.strictEqual(Math.round(sb.pay['Bilibili Gaming']), 252575 + 330627 + 15915, 'single games stay out'); assert.strictEqual(sb.lead, 'Bilibili Gaming');
+    const w = { w: '0xw', name: 'W' }; const A = (o) => Object.assign({ ev, main: true, cat: 'Esports', rec: { net: 1, n: 1 }, fresh: false }, o);
+    const both = group(w, [A({ outcome: 'Bilibili Gaming', added: 90000, paid: 0.37, last: 200 }), A({ outcome: 'Gen.G', added: 85000, paid: 0.76, last: 100 })], book);
+    assert.strictEqual(both.length, 1, 'two buys, one card'); assert.strictEqual(both[0].outcome, 'Bilibili Gaming'); assert.strictEqual(both[0].added, 90000); assert.strictEqual(both[0].lean, 'hedged'); assert.strictEqual(both[0].quiet, false); assert.strictEqual(both[0].net.both, true); assert.strictEqual(both[0].id, '0xw|' + ev);
+    const trim = group(w, [A({ outcome: 'Gen.G', added: 85000, paid: 0.76, last: 100 })], book); assert.strictEqual(trim[0].outcome, 'Bilibili Gaming'); assert.strictEqual(trim[0].quiet, true, 'buying only the smaller side is a trim, and is not pushed');
+    const sideM = group(w, [A({ main: false, outcome: 'Gen.G', added: 78000, paid: 0.56, last: 50, id: 'x' })], book); assert.strictEqual(sideM[0].grouped, undefined); assert.strictEqual(sideM[0].series.lead, 'Bilibili Gaming');
+  });
+
   // alerts and tracked positions in the page
   await check('page: a stop needs a real two-sided quote, and a position is valued on its own venue', () => {
     const js = fs.readFileSync(path.join(root, 'assets', 'app.js'), 'utf8'); const line = (re) => { const m = re.exec(js); assert.ok(m, 'not found: ' + re); return m[0]; };
