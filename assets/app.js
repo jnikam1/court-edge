@@ -297,11 +297,11 @@
     var ctx = el('div', 'ctx'); var gap = m.gap && m.gap.edge >= 0.03 && m.state === 'upcoming';
     if (gap) add(ctx, el('b', '', 'Gap '), document.createTextNode(m[m.gap.side].name + ' at ' + cents(m.gap.ask) + ', ' + m.book.name + ' fair ' + cents(m.gap.fair) + '. '));
     else if (on && m.sit && m.sit.text) ctx.appendChild(document.createTextNode(m.sit.text + ' '));
-    else if (m.blurb) ctx.appendChild(document.createTextNode((m.note ? m.note + '. ' : '') + m.blurb + ' '));
+    else if (m.blurb) ctx.appendChild(document.createTextNode(m.blurb + ' '));
     else if (!on && m.book && has(m.book.a)) ctx.appendChild(document.createTextNode(m.book.name + ' fair ' + cents(m.book.a) + ' / ' + cents(m.book.b) + (m.book.text ? ' · ' + m.book.text : '') + ' '));
     var inj = []; ['a', 'b'].forEach(function (k) { ((m.inj && m.inj[k]) || []).forEach(function (i) { inj.push(last(i.name) + ' ' + i.tag.toLowerCase()); }); });
     if (inj.length) ctx.appendChild(el('span', 'inj', inj.slice(0, 3).join(', ')));
-    return wrapCard(matchRow(m, { lg: (m.league === 'nba' ? 'NBA' : 'NFL') + (m.note ? ' · ' + m.note : ''), st: gState(m), live: m.state === 'live', cells: cells, sub: [m.a.record || '', [m.b.record, 'home'].filter(Boolean).join(' · ')], ctx: ctx.childNodes.length ? ctx : null }), m);
+    return wrapCard(matchRow(m, { lg: (m.league === 'nba' ? 'NBA' : m.league === 'ufc' ? 'UFC' : 'NFL') + (m.note ? ' · ' + m.note : ''), st: gState(m), live: m.state === 'live', cells: cells, sub: [m.a.record || '', [m.b.record, m.league === 'ufc' ? null : 'home'].filter(Boolean).join(' · ')], ctx: ctx.childNodes.length ? ctx : null }), m);
   }
   function gameGrid(m) { // the larger scoreboard on a game's own page
     var g = el('div', 'players'); var on = m.state !== 'upcoming';
@@ -360,7 +360,7 @@
       if (loading.length === wanted.length) return 'Loading…';
       if (D.q) return 'Nothing ' + (kind === 'listed' ? '' : kind + ' ') + 'matches "' + D.q + '". Check the spelling, or clear the search.';
       if (failed.length === wanted.length) return 'Could not load ' + what + '. Trying again every 15 seconds.';
-      if (kind === 'live') return 'No ' + what + ' in play right now.';
+      if (kind === 'live') return D.sport === 'ufc' ? 'The app has no live round feed for fights yet, so it cannot show which bout is under way. The card is listed below in order.' : 'No ' + what + ' in play right now.';
       return 'No ' + what + (kind === 'listed' ? ' are listed' : ' ' + kind) + ' on Kalshi right now.' + (D.sport === 'nba' || D.sport === 'nfl' ? ' Games appear here as soon as Kalshi lists them.' : D.sport === 'ufc' ? ' Fights appear here when Kalshi lists the next card.' : '');
     };
     var gaps = rows.filter(function (r) { return r.gap; }); $('secGaps').hidden = !gaps.length || D.when === 'up' && !gaps.some(function (r) { return !r.live; });
