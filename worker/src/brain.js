@@ -168,6 +168,7 @@ export function manage(sig, q, now) {
   const age = now - sig.t; const ctx = sig.ctx || {};
   // A result only counts when the exchange has confirmed it. A 97¢ bid or a vanished quote proves nothing.
   if (q && (q.result === 'yes' || q.result === 'no')) return done('settled', q.result === 'yes' ? 1 : 0);
+  if (q && q.result === 'scalar' && num(q.settle) !== null) return done('settled', q.settle); // a draw or no contest: the exchange pays a set amount, usually 50¢
   if (!q || num(q.bid) === null && num(q.ask) === null) {
     // No quote and no confirmed result: keep waiting. A timed trade that cannot be priced at its deadline is thrown out,
     // not guessed, and a hold-to-result trade is thrown out only after three days without an answer.

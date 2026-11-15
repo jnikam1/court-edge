@@ -140,6 +140,7 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     // a result is only ever taken from the exchange
     assert.strictEqual(B.manage(Object.assign({}, sig, { target: null, deadline: null }), { bid: 0.98, ask: 0.99, state: 'closing' }, now + 900).status, undefined, 'a 98¢ bid is not a win');
     const won = B.manage(sig, { bid: 0.98, ask: 0.99, result: 'yes' }, now + 900); assert.strictEqual(won.status, 'settled'); assert.strictEqual(won.exit, 1);
+    const draw = B.manage(sig, { bid: null, ask: null, result: 'scalar', settle: 0.5 }, now + 900); assert.strictEqual(draw.status, 'settled'); assert.strictEqual(draw.exit, 0.5, 'a draw pays what the exchange says');
     const lost = B.manage(sig, { bid: null, ask: null, result: 'no' }, now + 900); assert.strictEqual(lost.status, 'settled'); assert.strictEqual(lost.exit, 0); assert.ok(lost.net < -44);
     assert.deepStrictEqual(B.manage(sig, null, now + 300), {}, 'a missing quote is waited out');
     assert.strictEqual(B.manage(Object.assign({ last: 0.95 }, sig), null, now + 3100).status, 'void', 'a last price of 95¢ and no result is thrown out, not booked as a win');

@@ -179,7 +179,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
     if (skip) continue; // that feed did not answer this minute: leave the trade as it is
     // A Kalshi trade is settled only on Kalshi's own result. Ask for it when the quote is gone or looks decided.
     if (sg.setup !== 'whale_add' && sg.ticker && (!q || q.state === 'closing' || q.bid >= 0.97 || (q.ask > 0 && q.ask <= 0.03) || (q.bid === null && q.ask === null))) {
-      const res = await kalshiResult(sg.ticker); if (res) q = Object.assign(q || { bid: null, ask: null }, { result: res });
+      const res = await kalshiResult(sg.ticker); if (res) q = Object.assign(q || { bid: null, ask: null }, typeof res === 'string' ? { result: res } : { result: 'scalar', settle: res.scalar });
     }
     const up = manage(sg, q, now); if (up.status === 'settled') up.verified = 1; const keys = Object.keys(up); if (!keys.length) continue;
     await env.DB.prepare('UPDATE signals SET ' + keys.map((k) => k + ' = ?').join(', ') + ' WHERE id = ?').bind(...keys.map((k) => nul(up[k])), sg.id).run();
@@ -191,7 +191,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   const old = ((await env.DB.prepare("SELECT * FROM signals WHERE status = 'settled' AND verified IS NULL AND setup != 'whale_add' AND ticker IS NOT NULL LIMIT 4").all()).results) || []; let fixed = 0;
   for (const sg of old) {
     const res = await kalshiResult(sg.ticker); fixed++;
-    if (res) { const exit = res === 'yes' ? 1 : 0; await env.DB.prepare('UPDATE signals SET exit = ?, net = ?, verified = 1 WHERE id = ?').bind(exit, netCents(sg, 'settled', exit), sg.id).run(); }
+    if (res) { const exit = res === 'yes' ? 1 : res === 'no' ? 0 : res.scalar; await env.DB.prepare('UPDATE signals SET exit = ?, net = ?, verified = 1 WHERE id = ?').bind(exit, netCents(sg, 'settled', exit), sg.id).run(); }
     else await env.DB.prepare("UPDATE signals SET status = 'open', exit = NULL, exit_t = NULL, net = NULL WHERE id = ?").bind(sg.id).run(); // not decided yet: it was closed too early
   }
   return { found: found.length, opened, open: open.length, closed, rechecked: fixed };
@@ -199,7 +199,9 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
 // Kalshi's confirmed result for one market: 'yes', 'no', or null while it is undecided or unreachable.
 async function kalshiResult(ticker) {
   const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets/' + encodeURIComponent(ticker), { headers: { Accept: 'application/json' } }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-  const res = r && r.market ? String(r.market.result || '').toLowerCase() : ''; return res === 'yes' || res === 'no' ? res : null;
+  const m = r && r.market ? r.market : null; const res = m ? String(m.result || '').toLowerCase() : '';
+  if (res === 'scalar' && m.settlement_value_dollars !== undefined && m.settlement_value_dollars !== null && Number.isFinite(Number(m.settlement_value_dollars))) return { scalar: Number(m.settlement_value_dollars) }; // draw or no contest
+  return res === 'yes' || res === 'no' ? res : null;
 }
 // Polymarket prices by market, keyed by outcome name. Returns null when Polymarket cannot be reached, so nothing is marked on a guess.
 async function pmPrices(conds) {
