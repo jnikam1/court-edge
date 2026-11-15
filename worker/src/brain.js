@@ -9,6 +9,8 @@ export const SETUPS = {
   tennis_reprice: { label: 'Tennis price under the live model after a set', push: true, basis: 'New setup with no record yet.' },
   injury_news: { label: 'Late injury news', push: false, basis: 'Measures how far the price moves after the report changes.' },
   ufc_fav: { label: 'UFC favourite at the bell', push: false, basis: 'Not a tip. Buys every favourite on paper when the bout before it ends and holds to the result, to keep our own record of how often favourites win at each price.' },
+  ufc_flow: { label: 'UFC money piling onto one fighter, sold 15 minutes later', push: false, basis: 'A test, not a tip: when 70% or more of the last 10 minutes of Kalshi money is on one fighter, does the price keep going that way?' },
+  ufc_flow_hold: { label: 'UFC money piling onto one fighter, held to the result', push: false, basis: 'The same trigger held to the end: does the fighter the money piled onto actually win more often than the price said?' },
   whale_add: { label: 'Big whale add', push: false, basis: 'Measures whether the price moves the whale\'s way after we see the add.' },
 };
 
@@ -100,6 +102,18 @@ export function fightSignals(g, now) {
   if (ask === null || ask < 0.5 || ask >= 0.97) return [];
   return [{ id: 'ufc_fav|' + g.event, setup: 'ufc_fav', lg: 'ufc', event: g.event, side: k, name, ticker: k === 'a' ? g.at : g.bt, title: g.an + ' v ' + g.bn, url: '/#m=' + g.event,
     entry: ask, model: null, target: null, deadline: null, t: now, ctx: { card: g.card || null }, why: name + ' is the favourite at ' + cents(ask) + ' as the bout before it ends. Held to the result.' }];
+}
+// UFC money test: at least $10k traded on a bout in the last 10 minutes with 70% or more of it on one fighter.
+// Opened once per fighter before the fight and once per round, two ways: sold after 15 minutes, and held to the result.
+export function flowSignals(g, now) {
+  if (!g || g.lg !== 'ufc' || g.state === 'closing' || !Array.isArray(g.f10)) return [];
+  const a = num(g.f10[0]) || 0; const b = num(g.f10[1]) || 0; const tot = a + b; if (tot < 10000) return [];
+  const k = a >= b ? 'a' : 'b'; const share = Math.max(a, b) / tot; if (share < 0.7) return [];
+  const ask = k === 'a' ? num(g.aa) : num(g.ba); if (ask === null || ask < 0.1 || ask > 0.9) return [];
+  const name = k === 'a' ? g.an : g.bn; const phase = g.state === 'live' ? 'r' + (g.period || 0) : 'pre';
+  const base = { lg: 'ufc', event: g.event, side: k, name, ticker: k === 'a' ? g.at : g.bt, title: g.an + ' v ' + g.bn, url: '/#m=' + g.event, entry: ask, model: null, target: null, t: now, ctx: { card: g.card || null, share: r2(share), usd: Math.round(tot), phase },
+    why: '$' + Math.round(Math.max(a, b) / 1000) + 'k of the $' + Math.round(tot / 1000) + 'k traded on Kalshi in the last 10 minutes was on ' + name + ' (' + Math.round(share * 100) + '%), ' + (phase === 'pre' ? 'before the fight' : 'in round ' + (g.period || '?')) + '. Bought at ' + cents(ask) + '.' };
+  return [Object.assign({ id: 'ufc_flow|' + g.event + '|' + k + '|' + phase, setup: 'ufc_flow', deadline: now + 15 * 60 }, base), Object.assign({ id: 'ufc_flow_hold|' + g.event + '|' + k + '|' + phase, setup: 'ufc_flow_hold', deadline: null }, base)];
 }
 // Our own UFC record from those paper trades: how often favourites won at each price, and what rolling the two
 // biggest favourites of each card into each other ("a 2x parlay") actually returned.

@@ -1,4 +1,4 @@
-import { SETUPS, gameSignals, tennisSignals, fightSignals, favStats, manage, netCents, summarize, whaleGrades, cents } from './brain.js';
+import { SETUPS, gameSignals, tennisSignals, fightSignals, flowSignals, favStats, manage, netCents, summarize, whaleGrades, cents } from './brain.js';
 // Court Edge logger (Cloudflare Worker).
 // Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
 // in play and each NBA or NFL game near its start, record new big whale adds and injury report
@@ -120,7 +120,7 @@ const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x)
 const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
 const getJson = async (url) => { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error(url.split('/api/')[1] + ' ' + r.status); return r.json(); };
 
-const QUIET = { whale_add: 1, injury_news: 1, ufc_fav: 1 }; // record keeping, not trade ideas
+const QUIET = { whale_add: 1, injury_news: 1, ufc_fav: 1, ufc_flow: 1, ufc_flow_hold: 1 }; // record keeping, not trade ideas
 const COLS = ['id', 't', 'setup', 'lg', 'event', 'side', 'name', 'ticker', 'title', 'url', 'entry', 'target', 'deadline', 'model', 'why', 'ctx', 'status'];
 async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   const found = []; const games = (sp && sp.games) || []; const byEvent = new Map(games.map((g) => [g.event, g]));
@@ -136,6 +136,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   for (const m of matches) found.push(...tennisSignals(m, now));
   // UFC: when a bout that was listed a few minutes ago is gone or decided, the next one on that card is up. Buy its favourite on paper, once.
   const ufc = games.filter((g) => g.lg === 'ufc');
+  for (const g of ufc) found.push(...flowSignals(g, now)); // the money test
   if (ufc.length) {
     const before = (((await env.DB.prepare("SELECT DISTINCT event FROM gsnaps WHERE lg = 'ufc' AND state != 'closing' AND t >= ? AND t < ?").bind(now - 900, now).all()).results) || []).map((r) => r.event);
     const still = new Set(ufc.filter((g) => g.state !== 'closing').map((g) => g.event)); const cardOf = (ev) => (String(ev).split('-').pop().match(/^\d{2}[A-Z]{3}\d{2}/) || [''])[0];

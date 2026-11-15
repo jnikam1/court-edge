@@ -173,6 +173,16 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       const busy = await flow({ a: { ticker: 'F2-AAA' }, b: { ticker: 'F2-BBB' } }); assert.strictEqual(busy.m60, null, 'a full page that only reaches back 17 minutes cannot speak for the hour'); assert.ok(busy.m10.n >= 599 && busy.m10.n <= 602); assert.ok(busy.since >= 998 && busy.since <= 1001); assert.strictEqual(busy.all.a, 500);
     } finally { global.fetch = realFetch; }
   });
+  await check('engine: the UFC money test opens only on a large one-sided ten minutes, once per fighter per phase, both ways', async () => {
+    const B = await import(path.join(root, 'worker/src/brain.js')); const now = 3000000;
+    const g = { lg: 'ufc', event: 'KXUFCFIGHT-26NOV14GANHOK', card: '26NOV14', state: 'upcoming', an: 'Ciryl Gane', bn: 'Josh Hokit', at: 'T-GAN', bt: 'T-HOK', ab: 0.66, aa: 0.67, bb: 0.33, ba: 0.34, f10: [42000, 9000] };
+    const s = B.flowSignals(g, now); assert.deepStrictEqual(s.map((x) => x.setup), ['ufc_flow', 'ufc_flow_hold']); assert.strictEqual(s[0].name, 'Ciryl Gane'); assert.strictEqual(s[0].entry, 0.67); assert.strictEqual(s[0].deadline, now + 900); assert.strictEqual(s[1].deadline, null); assert.strictEqual(s[0].id, 'ufc_flow|KXUFCFIGHT-26NOV14GANHOK|a|pre');
+    assert.strictEqual(B.flowSignals(Object.assign({}, g, { f10: [39000, 37000] }), now).length, 0, 'an even split is not a signal'); assert.strictEqual(B.flowSignals(Object.assign({}, g, { f10: [4000, 500] }), now).length, 0, 'too little money to mean anything');
+    assert.strictEqual(B.flowSignals(Object.assign({}, g, { f10: null }), now).length, 0); assert.strictEqual(B.flowSignals(Object.assign({}, g, { state: 'closing' }), now).length, 0);
+    const live = B.flowSignals(Object.assign({}, g, { state: 'live', period: 2, f10: [5000, 30000] }), now); assert.strictEqual(live[0].name, 'Josh Hokit'); assert.strictEqual(live[0].id, 'ufc_flow|KXUFCFIGHT-26NOV14GANHOK|b|r2'); assert.strictEqual(live[0].entry, 0.34);
+    assert.strictEqual(B.flowSignals(Object.assign({}, g, { aa: 0.95, ab: 0.94 }), now).length, 0, 'nothing to learn at 95¢');
+    assert.strictEqual(B.manage(Object.assign({ last: null }, s[0]), { bid: 0.7, ask: 0.71 }, now + 900).status, 'deadline'); assert.deepStrictEqual(Object.keys(B.manage(Object.assign({ last: 0.7, hi: 0.7, lo: 0.7, m5: 0.7, m15: 0.7 }, s[1]), { bid: 0.7, ask: 0.71 }, now + 5000)), [], 'the held version waits for the result');
+  });
   await check('engine: UFC favourites are bought once at the scheduled start, and the record and two-favourite roll add up', async () => {
     const B = await import(path.join(root, 'worker/src/brain.js')); const now = 2000000;
     const g = { lg: 'ufc', event: 'KXUFCFIGHT-26NOV14GANHOK', card: '26NOV14', state: 'upcoming', start: now + 9000, an: 'Ciryl Gane', bn: 'Josh Hokit', at: 'T-GAN', bt: 'T-HOK', ab: 0.66, aa: 0.67, bb: 0.33, ba: 0.34 };
