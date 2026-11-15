@@ -277,3 +277,10 @@ details.adv[open] > summary { margin-bottom: 4px; }
 .flow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .flow .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: block; }
 .flow .bar .fa { display: block; height: 100%; background: var(--accent); }
+
+/* money view rows and header links */
+a.row.money { display: block; padding: 12px 16px; }
+a.row.money .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+a.row.money .flow { margin-bottom: 0; }
+.hlinks { display: flex; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
+@media (min-width: 960px) { .page-h .hlinks { display: none; } }

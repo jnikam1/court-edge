@@ -19,11 +19,12 @@
   <span class="brand"><i></i>Court Edge</span>
   <a href="#" id="tabD">Discover</a><a href="#watch" id="tabWa">Watchlist</a><a href="#positions" id="tabP">Positions</a><a href="#alerts" id="tabA">Alerts<span class="badge" id="aBadge" hidden></span></a>
   <a href="#whales" class="sec" id="tabWh">Whale tracker</a>
+  <a href="#money" class="sec" id="tabMo">Money flow</a>
 </nav>
 <div class="tabbar act" id="actbar"><button type="button" id="actSave" aria-label="Save to watchlist"></button><button type="button" class="pri" id="actAlert">Set alert</button><button type="button" class="pri" id="actTrade">Track position</button></div>
 
 <main id="discoverView">
-  <header class="page-h"><h1>Discover</h1><a class="ext" href="#whales">Whale tracker ›</a></header>
+  <header class="page-h"><h1>Discover</h1><span class="hlinks"><a class="ext" href="#money">Money flow ›</a><a class="ext" href="#whales">Whale tracker ›</a></span></header>
   <div class="filters">
     <label class="search"><span id="qIcon"></span><input id="q" type="search" placeholder="Search players or teams" aria-label="Search players or teams" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <div class="seg" id="fSport" role="group" aria-label="Sport and status"></div>
@@ -43,6 +44,12 @@
       <li>Nothing here is a proven edge or advice.</li>
     </ul>
   </details>
+</main>
+
+<main id="moneyView" hidden>
+  <header><button class="back" id="mBack" type="button">‹ Discover</button><h1>Money flow</h1><div class="status" id="mStatus">Kalshi trades in the last 10 minutes on every match in play or about to start.</div></header>
+  <div class="filters"><div class="seg" id="mSport" role="group" aria-label="Sport"></div></div>
+  <div class="list" id="mList"><div class="empty">Loading the tape…</div></div>
 </main>
 
 <main id="whalesView" hidden>

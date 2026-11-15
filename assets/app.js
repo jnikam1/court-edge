@@ -1047,10 +1047,10 @@
     cur.timers.push(setInterval(function () { if (!document.hidden) loadWhales(); }, WHALE_MS));
   }
   function show(view) {
-    ['discoverView', 'detailView', 'whalesView', 'watchView', 'positionsView', 'alertsView'].forEach(function (id) { $(id).hidden = id !== view; });
+    ['discoverView', 'detailView', 'whalesView', 'moneyView', 'watchView', 'positionsView', 'alertsView'].forEach(function (id) { $(id).hidden = id !== view; });
     document.body.classList.toggle('on-detail', view === 'detailView'); // phones swap the tab bar for the action bar on a matchup
-    var tab = { discoverView: 'tabD', whalesView: 'tabWh', watchView: 'tabWa', positionsView: 'tabP', alertsView: 'tabA' }[view];
-    ['tabD', 'tabWa', 'tabP', 'tabA', 'tabWh'].forEach(function (id) { if (id === tab) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current'); });
+    var tab = { discoverView: 'tabD', whalesView: 'tabWh', moneyView: 'tabMo', watchView: 'tabWa', positionsView: 'tabP', alertsView: 'tabA' }[view];
+    ['tabD', 'tabWa', 'tabP', 'tabA', 'tabWh', 'tabMo'].forEach(function (id) { if (id === tab) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current'); });
   }
   var place = {}; var lastList = ''; var prevHash;
   var backTo = function (h) { var y = place[h] || 0; requestAnimationFrame(function () { window.scrollTo(0, y); }); }; // return to where the list was left
@@ -1067,6 +1067,7 @@
     var sp = h === '#nba' ? 'nba' : h === '#nfl' ? 'nfl' : h === '#tennis' ? 'tennis' : null; // old links to one sport
     if (sp) { D.sport = sp; try { localStorage.setItem('ce-sport2', sp); } catch (e) {} location.replace('#'); return; }
     if (h === '#whales') { show('whalesView'); openWhales(); badge(); backTo(h); return; }
+    if (h === '#money') { show('moneyView'); loadMoney(); cur.timers.push(setInterval(function () { if (!document.hidden) loadMoney(); }, 30000)); badge(); backTo(h); return; }
     if (h === '#alerts') { show('alertsView'); mine = 0; renderRules(); renderAlerts(); badge(); loadLogger(); pullRules(); loadSignals(); loadInjuries(); setTimeout(function () { al.fresh = {}; }, 60000); backTo(h); return; }
     if (h === '#watch') { show('watchView'); loadWatch(); badge(); backTo(h); return; }
     if (h === '#positions') { show('positionsView'); renderJournal(); badge(); backTo(h); return; }
@@ -1282,6 +1283,30 @@
     box.appendChild(el('div', 'small', 'The logger checks every minute and sends the big-add alerts shown above, plus NBA and NFL injury report changes for top scorers and starting quarterbacks, even with the app closed.'));
   }
   // The decision engine's record: each setup's closed paper trades, then the latest ones.
+  // Money flow: every match in play or about to start, ranked by dollars traded on Kalshi in the last ten minutes.
+  var MO = { sport: 'all', data: null }; try { var m0 = localStorage.getItem('ce-msport'); if (m0) MO.sport = m0; } catch (e) {}
+  function renderMoney() {
+    var seg = $('mSport'); seg.replaceChildren();
+    SPORTS.forEach(function (o) { var b = el('button', '', o[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(MO.sport === o[0])); b.addEventListener('click', function () { MO.sport = o[0]; try { localStorage.setItem('ce-msport', o[0]); } catch (e) {} renderMoney(); }); seg.appendChild(b); });
+    var box = $('mList'); var d = MO.data; if (!d) return; box.replaceChildren();
+    var rows = (d.rows || []).filter(function (r) { return MO.sport === 'all' || r.league === MO.sport; });
+    if (!rows.length) { box.appendChild(el('div', 'empty', 'Nothing in play or starting soon' + (MO.sport === 'all' ? '' : ' in this sport') + ' right now.')); return; }
+    add(box, el('div', 'list-head', 'Most money first · buyers only, by the side they backed'));
+    rows.forEach(function (r) {
+      var a = el('a', 'row money'); a.href = '#m=' + encodeURIComponent(r.event); var tn = r.league === 'tennis'; var A = tn ? last(r.a.name) : r.a.name, B = tn ? last(r.b.name) : r.b.name; // players by last name, teams and fighters in full
+      var top = el('div', 'top'); add(top, el('b', '', r.a.name + ' v ' + r.b.name), el('span', 'chip' + (r.state === 'live' ? ' live' : ''), r.label + (r.state === 'live' ? ' · ' + (r.text || 'in play') : ' · soon')));
+      a.appendChild(top);
+      if (!r.f || !(r.f.a + r.f.b)) a.appendChild(el('div', 'small', 'No trades in the last 10 minutes.'));
+      else {
+        var tot = r.f.a + r.f.b; var pa = Math.round(r.f.a / tot * 100); var w = el('div', 'flow'); var bar = el('div', 'bar'); var fa = el('span', 'fa'); fa.style.width = pa + '%'; bar.appendChild(fa);
+        var kv = el('div', 'kv'); kv.style.gridTemplateColumns = '1fr 1fr'; add(kv, el('span', '', A + ' ' + usd(r.f.a) + ' (' + pa + '%)'), el('span', 'num', B + ' ' + usd(r.f.b) + ' (' + (100 - pa) + '%)'));
+        add(w, bar, kv, el('div', 'small', 'Last ' + r.f.mins + ' min · ' + r.f.n + ' trades · ' + A + ' ' + cents(r.a.ask) + ', ' + B + ' ' + cents(r.b.ask) + (r.big ? ' · biggest ' + usd(r.big.usd) + ' on ' + (r.big.side === 'a' ? A : B) + ' at ' + cents(r.big.price) : ''))); a.appendChild(w);
+      }
+      box.appendChild(a);
+    });
+    $('mStatus').textContent = 'Kalshi trades in the last 10 minutes on every match in play or about to start. Updated ' + new Date(d.asOf).toLocaleTimeString() + '.';
+  }
+  function loadMoney() { renderMoney(); get('/api/sports?view=money').then(function (d) { MO.data = d; renderMoney(); }).catch(function () { if (!MO.data) $('mList').replaceChildren(el('div', 'empty', 'Could not load the trade tape. It retries every 30 seconds.')); }); }
   function loadSignals() {
     var box = $('sigBox'); if (!pu.url) { box.replaceChildren(el('div', 'empty', 'Needs the alert server address, under Advanced below.')); return; }
     lg('/signals').then(function (d) {
@@ -1344,6 +1369,13 @@
   function alertCard(a) {
     var c = el('button', 'bet'); c.type = 'button';
     var who = el('div', 'who'); add(who, el('b', '', a.whale), el('span', '', ago(a.last)));
+    if (a.sell) { // a strong wallet getting out, cutting back, or changing sides
+      add(c, who, el('div', 'bet-t', a.kind === 'switch' ? 'Switched from ' + a.outcome + ' to ' + a.to : a.kind === 'exit' ? 'Sold out of ' + a.outcome : 'Sold ' + usd(a.sold) + ' of ' + a.outcome), el('div', 'sub', a.title),
+        trio([['Sold', usd(a.sold)], ['Sold at', has(a.price) ? cents(a.price) : '–'], [a.kind === 'switch' ? 'Bought ' + last(a.to) : 'Still holds', a.kind === 'switch' ? usd(a.bought) : a.left ? usd(a.left) : 'Nothing']]),
+        el('div', 'small', 'Net of anything it bought on the same side in the last 3 hours. A sale can be taking profit, cutting a loss or freeing up cash: the tape does not say which.'));
+      var sf = el('div', 'foot'); add(sf, el('span', 'chip good', a.cat + ' record ' + signed(a.rec.net) + (a.rec.n ? ' over ' + a.rec.n : '')), el('span', 'chip', a.kind === 'switch' ? 'Switch' : a.kind === 'exit' ? 'Exit' : 'Sale')); if (al.fresh[a.id]) sf.appendChild(el('span', 'chip window', 'New')); c.appendChild(sf);
+      c.disabled = false; return c;
+    }
     if (a.grouped) { // one card for the wallet's whole position on this match
       var g = a.net; var weak = a.lean === 'hedged';
       add(c, who, el('div', 'bet-t', (weak ? 'Leans ' : 'On ') + a.outcome + (weak ? ', but works both sides' : '')), el('div', 'sub', a.title),
@@ -1372,7 +1404,7 @@
   }
   function renderAlerts() {
     var d = al.data; if (!d) return; var box = $('aList'); box.replaceChildren();
-    if (!d.alerts.length) box.appendChild(el('div', 'empty', 'No big adds in the last ' + Math.round(d.minutes / 60) + ' hours.'));
+    if (!d.alerts.length) box.appendChild(el('div', 'empty', 'No big adds or sales in the last ' + Math.round(d.minutes / 60) + ' hours.'));
     d.alerts.forEach(function (a) { box.appendChild(alertCard(a)); });
     var s = $('aStatus'); s.replaceChildren();
     add(s, document.createTextNode('Checked '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(', every minute while the app is open. ' + d.wallets + ' wallets' + (d.failed ? ', ' + d.failed + ' could not be read this time' : '') + '.'));
@@ -1405,7 +1437,7 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) loadAlerts(); });
 
   $('back').addEventListener('click', function () { location.hash = lastList || '#'; });
-  $('wBack').addEventListener('click', function () { location.hash = '#'; });
+  $('wBack').addEventListener('click', function () { location.hash = '#'; }); $('mBack').addEventListener('click', function () { location.hash = '#'; });
   $('qIcon').appendChild(icon('discover'));
   $('q').addEventListener('input', function () { D.q = $('q').value.trim().toLowerCase(); renderDiscover(); });
   $('tabWh').insertBefore(icon('whale'), $('tabWh').firstChild);

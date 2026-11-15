@@ -62,6 +62,15 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       positions = [{ status: 'OPEN', outcome_index: 0, outcome: 'A', current_size: 100000, total_size: 100000, avg_price: 0.6, current_price: 0.62, first_entry_at: now - 600 }];
       const a = (await scanOne(w, now - 10800, o)).alerts; assert.strictEqual(a.length, 1); assert.strictEqual(a[0].stake, 60000);
       trades = [buy, Object.assign({}, buy, { side: 'SELL', timestamp: now - 300 })]; assert.strictEqual((await scanOne(w, now - 10800, o)).alerts.length, 0, 'bought and sold the same amount: not an add');
+      // selling more than it bought is reported as a sale, an exit or a switch
+      const sell = Object.assign({}, buy, { side: 'SELL', usdc_size: 40000, size: 60000, price: 0.66, outcome: 'A', timestamp: now - 200 });
+      trades = [sell]; positions = [{ status: 'OPEN', outcome_index: 0, outcome: 'A', current_size: 40000, total_size: 100000, avg_price: 0.6, current_price: 0.66 }];
+      let sl = (await scanOne(w, now - 10800, o)).alerts; assert.strictEqual(sl.length, 1); assert.strictEqual(sl[0].sell, true); assert.strictEqual(sl[0].kind, 'trim'); assert.strictEqual(sl[0].sold, 40000); assert.strictEqual(sl[0].left, 24000); assert.ok(Math.abs(sl[0].price - 0.667) < 0.001);
+      positions = []; sl = (await scanOne(w, now - 10800, o)).alerts; assert.strictEqual(sl[0].kind, 'exit', 'nothing left: it is out');
+      trades = [sell, Object.assign({}, buy, { outcome_index: 1, outcome: 'B', usdc_size: 50000, timestamp: now - 100 })]; positions = [{ status: 'OPEN', outcome_index: 1, outcome: 'B', current_size: 100000, total_size: 100000, avg_price: 0.4, current_price: 0.4, first_entry_at: now - 100 }];
+      sl = (await scanOne(w, now - 10800, o)).alerts.filter((x) => x.sell); assert.strictEqual(sl[0].kind, 'switch'); assert.strictEqual(sl[0].to, 'B'); assert.strictEqual(sl[0].bought, 50000);
+      trades = [Object.assign({}, sell, { usdc_size: 9000 })]; assert.strictEqual((await scanOne(w, now - 10800, o)).alerts.length, 0, 'a small sale is not news');
+      positions = [{ status: 'OPEN', outcome_index: 0, outcome: 'A', current_size: 100000, total_size: 100000, avg_price: 0.6, current_price: 0.62, first_entry_at: now - 600 }];
       trades = [buy, Object.assign({}, buy, { side: 'SELL', usdc_size: 20000, timestamp: now - 300 })]; assert.strictEqual((await scanOne(w, now - 10800, o)).alerts[0].added, 40000, 'the add is what it bought less what it sold');
     } finally { global.fetch = realFetch; }
   });

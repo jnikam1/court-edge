@@ -245,12 +245,18 @@ async function tick(env) {
     }
     note.snaps = stmts.length;
   } else note.scanError = scan && scan.error;
+  const first = !(await kvGet(env, 'started')); // the very first run only records what is already there
   // 2) new big whale adds
   let fresh = 0; const newAdds = []; const news = [];
   if (al && al.alerts) {
     for (const a of al.alerts) {
       const seen = await env.DB.prepare('SELECT last FROM sent WHERE id = ?').bind(a.id).first();
       if (seen && seen.last >= a.last) continue;
+      if (a.sell) { // a strong wallet getting out: sent to the phone, never tracked as an add
+        stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
+        if (!first) notes.push({ id: 'ws-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.kind === 'switch' ? ' switched from ' + a.outcome + ' to ' + a.to : a.kind === 'exit' ? ' sold out of ' + a.outcome : ' sold ' + kUsd(a.sold) + ' of ' + a.outcome), body: a.title + ' (' + a.cat + '). Sold ' + kUsd(a.sold) + (a.price ? ' at ' + cents(a.price) : '') + (a.kind === 'switch' ? ', bought ' + kUsd(a.bought) + ' of ' + a.to : a.left ? ', still holds ' + kUsd(a.left) : ', nothing left') + '.' });
+        continue;
+      }
       fresh++; newAdds.push(a);
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
@@ -260,7 +266,6 @@ async function tick(env) {
     }
     note.alerts = al.alerts.length; note.fresh = fresh;
   } else note.alertError = al && al.error;
-  const first = !(await kvGet(env, 'started'));
   if (first) await kvSet(env, 'started', now);
   if (first) notes.length = 0; // on the very first run everything looks new
   // 3) NBA and NFL: a price and score row per game near its start, and injury report changes for key players
