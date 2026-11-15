@@ -142,6 +142,19 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     const grades = B.whaleGrades([{ setup: 'whale_add', lg: 'NBA', name: 'w1', status: 'deadline', net: 6 }, { setup: 'whale_add', lg: 'NBA', name: 'w2', status: 'deadline', net: -2 }]);
     assert.strictEqual(grades[0].whale, 'w1'); assert.ok(grades[0].grade < 6 && grades[0].grade > 2, 'one good add is pulled toward the category average');
   });
+  await check('engine: UFC favourites are bought once at the scheduled start, and the record and two-favourite roll add up', async () => {
+    const B = await import(path.join(root, 'worker/src/brain.js')); const now = 2000000;
+    const g = { lg: 'ufc', event: 'KXUFCFIGHT-26NOV14GANHOK', card: '26NOV14', state: 'upcoming', start: now + 9000, an: 'Ciryl Gane', bn: 'Josh Hokit', at: 'T-GAN', bt: 'T-HOK', ab: 0.66, aa: 0.67, bb: 0.33, ba: 0.34 };
+    const s = B.fightSignals(g, now); assert.strictEqual(s.length, 1); assert.strictEqual(s[0].name, 'Ciryl Gane'); assert.strictEqual(s[0].entry, 0.67); assert.strictEqual(s[0].target, null); assert.strictEqual(s[0].ctx.card, '26NOV14');
+    assert.strictEqual(B.fightSignals(Object.assign({}, g, { state: 'closing' }), now).length, 0, 'not once the price says it is decided'); assert.strictEqual(B.fightSignals(Object.assign({}, g, { ab: 0.97, aa: 0.98 }), now).length, 0);
+    assert.strictEqual(B.fightSignals(Object.assign({}, g, { ab: 0.3, aa: 0.31, bb: 0.69, ba: 0.7 }), now)[0].name, 'Josh Hokit', 'the favourite is whoever is priced higher');
+    const won = B.manage(Object.assign({ last: null }, s[0]), { bid: 0.98, ask: 0.99, state: 'closing' }, now + 900); assert.strictEqual(won.status, 'settled'); assert.strictEqual(won.exit, 1); assert.strictEqual(won.net, Math.round((33 - 7 * 0.67 * 0.33) * 10) / 10);
+    const lost = B.manage(Object.assign({ last: null }, s[0]), { bid: 0.01, ask: 0.02, state: 'closing' }, now + 900); assert.strictEqual(lost.exit, 0);
+    const R = (card, entry, exit) => ({ setup: 'ufc_fav', status: 'settled', entry, exit, ctx: JSON.stringify({ card }) });
+    const st = B.favStats([R('A', 0.8, 1), R('A', 0.7, 1), R('A', 0.55, 0), R('B', 0.85, 1), R('B', 0.75, 0), R('C', 0.9, 1), { setup: 'ufc_fav', status: 'open', entry: 0.6 }]);
+    assert.strictEqual(st.fights, 6); assert.strictEqual(st.won, 4); assert.deepStrictEqual(st.buckets.map((b) => [b.n, b.won]), [[1, 0], [0, 0], [2, 1], [3, 3]]);
+    assert.strictEqual(st.roll.cards, 2, 'a card needs two finished favourites'); assert.strictEqual(st.roll.hit, 1); assert.ok(st.roll.avgReturn < 0 && st.roll.avgReturn > -0.2, 'one card paid about 1.7x, the other lost the stake');
+  });
   await check('engine: a full NFL game through the logger opens one paper trade, closes it at the target and scores it', async () => {
     let sqlite; try { sqlite = require('node:sqlite'); } catch (e) { console.log('      (skipped: this Node has no built-in SQLite)'); return; }
     const db = new sqlite.DatabaseSync(':memory:');
@@ -168,6 +181,30 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       assert.strictEqual(JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'last'").get().v).brainError, undefined);
       const res = await (await worker.fetch(new Request('https://logger.test/signals'), env)).json(); const row = res.summary.find((x) => x.setup === 'nfl_dog_lead');
       assert.deepStrictEqual([row.n, row.won, row.avg, row.open], [1, 1, 14.1, 0]); assert.strictEqual(res.signals.filter((x) => x.setup === 'nfl_dog_lead').length, 1); assert.strictEqual(res.tracked.length, 1); assert.ok(res.signals.every((x) => x.status !== 'open' || x.setup === 'score_follow'));
+    } finally { global.fetch = realFetch; Date.now = realNow; }
+  });
+
+  await check('engine: on a UFC card the next favourite is bought when the bout before it ends, and settled from Kalshi', async () => {
+    let sqlite; try { sqlite = require('node:sqlite'); } catch (e) { return; }
+    const db = new sqlite.DatabaseSync(':memory:');
+    const st = (sql, args) => ({ bind: (...a) => st(sql, a), first: async () => db.prepare(sql).get(...args) || null, all: async () => ({ results: db.prepare(sql).all(...args) }), run: async () => db.prepare(sql).run(...args), go: () => db.prepare(sql).run(...args) });
+    const env = { APP_URL: 'https://app.test', DB: { prepare: (sql) => st(sql, []), batch: async (list) => list.map((x) => x.go()) } };
+    const worker = (await import(path.join(root, 'worker/src/index.js') + '?ufc')).default;
+    let feed = {}; let result = null; const realFetch = global.fetch; const realNow = Date.now; let clock = 1794700000000;
+    global.fetch = async (u) => { if (String(u).indexOf('kalshi.com') >= 0) return { ok: true, status: 200, json: async () => ({ market: { result } }) }; const k = Object.keys(feed).find((x) => String(u).indexOf(x) >= 0); return { ok: true, status: 200, json: async () => (k ? feed[k] : {}) }; };
+    Date.now = () => clock;
+    const F = (code, an, bn, ab, start) => ({ lg: 'ufc', card: '26NOV14', event: 'KXUFCFIGHT-26NOV14' + code, state: 'upcoming', start, a: code.slice(0, 3), b: code.slice(3), an, bn, at: 'T-' + code.slice(0, 3), bt: 'T-' + code.slice(3), ab, aa: ab + 0.01, bb: Math.round((0.99 - ab) * 100) / 100, ba: Math.round((1 - ab) * 100) / 100, sa: null, sb: null, period: null, clock: null, book: null });
+    const run = async (games) => { feed = { '/api/sports': { games, inj: [], teams: [], feeds: {} }, '/api/alerts': { alerts: [] }, '/api/scan': { matches: [] } }; let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; clock += 60000; };
+    const one = F('MILMCK', 'Jim Miller', 'Terrance McKinney', 0.32, 1000); const two = F('GANHOK', 'Ciryl Gane', 'Josh Hokit', 0.66, 2000); const n = () => db.prepare("SELECT COUNT(*) n FROM signals WHERE setup = 'ufc_fav'").get().n;
+    try {
+      await run([one, two]); await run([one, two]); assert.strictEqual(n(), 0, 'nothing is bought while the card just sits there');
+      await run([two]);                                                 // the first bout's market closed: Gane v Hokit is next
+      const s = db.prepare("SELECT * FROM signals WHERE setup = 'ufc_fav'").get(); assert.strictEqual(s.name, 'Ciryl Gane'); assert.strictEqual(s.entry, 0.67); assert.strictEqual(s.status, 'open');
+      await run([two]); assert.strictEqual(n(), 1, 'bought once');
+      result = 'no'; await run([]);                                     // its market is gone too: Kalshi says the favourite lost
+      const d = db.prepare("SELECT * FROM signals WHERE setup = 'ufc_fav'").get(); assert.strictEqual(d.status, 'settled'); assert.strictEqual(d.exit, 0); assert.ok(d.net < -67);
+      const res = await (await worker.fetch(new Request('https://logger.test/signals'), env)).json(); assert.strictEqual(res.ufc.fights, 1); assert.strictEqual(res.ufc.won, 0); assert.strictEqual(res.signals.length, 0, 'record keeping stays out of the trade list');
+      assert.strictEqual(JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'last'").get().v).brainError, undefined);
     } finally { global.fetch = realFetch; Date.now = realNow; }
   });
 

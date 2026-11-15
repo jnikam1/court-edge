@@ -1,4 +1,4 @@
-import { SETUPS, gameSignals, tennisSignals, manage, summarize, whaleGrades, cents } from './brain.js';
+import { SETUPS, gameSignals, tennisSignals, fightSignals, favStats, manage, summarize, whaleGrades, cents } from './brain.js';
 // Court Edge logger (Cloudflare Worker).
 // Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
 // in play and each NBA or NFL game near its start, record new big whale adds and injury report
@@ -119,6 +119,7 @@ const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x)
 const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
 const getJson = async (url) => { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error(url.split('/api/')[1] + ' ' + r.status); return r.json(); };
 
+const QUIET = { whale_add: 1, injury_news: 1, ufc_fav: 1 }; // record keeping, not trade ideas
 const COLS = ['id', 't', 'setup', 'lg', 'event', 'side', 'name', 'ticker', 'title', 'url', 'entry', 'target', 'deadline', 'model', 'why', 'ctx', 'status'];
 async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   const found = []; const games = (sp && sp.games) || []; const byEvent = new Map(games.map((g) => [g.event, g]));
@@ -132,6 +133,13 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
     for (const g of live) { const p = pre.get(g.event); const preA = p && p.a_bid !== null && p.a_ask !== null && p.a_ask > 0 ? (p.a_bid + p.a_ask) / 2 : null; found.push(...gameSignals(g, prev.get(g.event) || null, preA, now)); }
   }
   for (const m of matches) found.push(...tennisSignals(m, now));
+  // UFC: when a bout that was listed a few minutes ago is gone or decided, the next one on that card is up. Buy its favourite on paper, once.
+  const ufc = games.filter((g) => g.lg === 'ufc');
+  if (ufc.length) {
+    const before = (((await env.DB.prepare("SELECT DISTINCT event FROM gsnaps WHERE lg = 'ufc' AND state != 'closing' AND t >= ? AND t < ?").bind(now - 900, now).all()).results) || []).map((r) => r.event);
+    const still = new Set(ufc.filter((g) => g.state !== 'closing').map((g) => g.event)); const cardOf = (ev) => (String(ev).split('-').pop().match(/^\d{2}[A-Z]{3}\d{2}/) || [''])[0];
+    for (const card of new Set(before.filter((ev) => !still.has(ev)).map(cardOf))) { const next = ufc.filter((g) => g.card === card && g.state !== 'closing').sort((x, y) => (x.start || 0) - (y.start || 0))[0]; if (next) found.push(...fightSignals(next, now)); }
+  }
   // news analyst: a key player ruled out (back the other side) or cleared (back his side), only when the game is quoted
   for (const n of news) {
     const g = byEvent.get(n.i.event); if (!g) continue; const mine = g.a === n.i.team ? 'a' : 'b'; const k = n.fade ? (mine === 'a' ? 'b' : 'a') : mine; const ask = k === 'a' ? g.aa : g.ba; if (!(ask > 0.03 && ask < 0.97)) continue;
@@ -161,6 +169,11 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
     else if (!sp || !sp.games) skip = true;
     else { const g = byEvent.get(sg.event); if (g) q = { bid: sg.side === 'a' ? g.ab : g.bb, ask: sg.side === 'a' ? g.aa : g.ba, state: g.state, behind: g.sa === null || g.sa === undefined || g.sb === null || g.sb === undefined ? null : (sg.side === 'a' ? g.sb - g.sa : g.sa - g.sb) }; }
     if (skip) continue; // that feed did not answer this minute: leave the trade as it is
+    if (!q && sg.setup === 'ufc_fav' && sg.ticker) { // Kalshi closes a bout's market the moment it is decided, so ask Kalshi who won
+      const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets/' + encodeURIComponent(sg.ticker), { headers: { Accept: 'application/json' } }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+      const res = r && r.market ? String(r.market.result || '').toLowerCase() : '';
+      if (res === 'yes' || res === 'no') q = res === 'yes' ? { bid: 1, ask: 1, state: 'closing' } : { bid: 0, ask: 0.01, state: 'closing' };
+    }
     const up = manage(sg, q, now); const keys = Object.keys(up); if (!keys.length) continue;
     await env.DB.prepare('UPDATE signals SET ' + keys.map((k) => k + ' = ?').join(', ') + ' WHERE id = ?').bind(...keys.map((k) => nul(up[k])), sg.id).run();
     if (up.status) { closed++; const S = SETUPS[sg.setup];
@@ -346,7 +359,7 @@ export default {
       if (url.pathname === '/signals') { // the engine's scoreboard and its latest paper trades
         const rows = ((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || [];
         const last = await kvGet(env, 'last'); const ln = last ? JSON.parse(last) : null;
-        return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), signals: rows.filter((r) => r.setup !== 'whale_add' && r.setup !== 'injury_news').slice(0, 40), tracked: rows.filter((r) => r.setup === 'whale_add' || r.setup === 'injury_news').slice(0, 30) });
+        return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), ufc: favStats(rows), signals: rows.filter((r) => !QUIET[r.setup]).slice(0, 40), tracked: rows.filter((r) => QUIET[r.setup]).slice(0, 40) });
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
       if (url.pathname === '/games') { // price and score history for one NBA or NFL game

@@ -8,6 +8,7 @@ export const SETUPS = {
   score_follow: { label: 'Price lagging a score change', push: false, basis: 'New setup with no record yet. Checked once a minute, so most lags are gone before it sees them.' },
   tennis_reprice: { label: 'Tennis price under the live model after a set', push: true, basis: 'New setup with no record yet.' },
   injury_news: { label: 'Late injury news', push: false, basis: 'Measures how far the price moves after the report changes.' },
+  ufc_fav: { label: 'UFC favourite at the bell', push: false, basis: 'Not a tip. Buys every favourite on paper when the bout before it ends and holds to the result, to keep our own record of how often favourites win at each price.' },
   whale_add: { label: 'Big whale add', push: false, basis: 'Measures whether the price moves the whale\'s way after we see the add.' },
 };
 
@@ -89,6 +90,31 @@ export function gameSignals(g, prev, preA, now) {
     }
   }
   return out;
+}
+
+// UFC: no score to model, so the engine keeps the record instead. Every favourite is bought on paper when it is next up.
+export function fightSignals(g, now) {
+  if (!g || g.lg !== 'ufc' || g.state === 'closing') return []; // the logger calls this once, when the bout before it on the card has just ended
+  const mA = mid(g.ab, g.aa); if (mA === null) return [];
+  const k = mA >= 0.5 ? 'a' : 'b'; const ask = k === 'a' ? num(g.aa) : num(g.ba); const name = k === 'a' ? g.an : g.bn;
+  if (ask === null || ask < 0.5 || ask >= 0.97) return [];
+  return [{ id: 'ufc_fav|' + g.event, setup: 'ufc_fav', lg: 'ufc', event: g.event, side: k, name, ticker: k === 'a' ? g.at : g.bt, title: g.an + ' v ' + g.bn, url: '/#m=' + g.event,
+    entry: ask, model: null, target: null, deadline: null, t: now, ctx: { card: g.card || null }, why: name + ' is the favourite at ' + cents(ask) + ' as the bout before it ends. Held to the result.' }];
+}
+// Our own UFC record from those paper trades: how often favourites won at each price, and what rolling the two
+// biggest favourites of each card into each other ("a 2x parlay") actually returned.
+export function favStats(rows) {
+  const done = rows.filter((r) => r.setup === 'ufc_fav' && r.status === 'settled' && (r.exit === 0 || r.exit === 1));
+  const edges = [0.5, 0.6, 0.7, 0.8, 1.01];
+  const buckets = edges.slice(0, -1).map((lo, i) => { const x = done.filter((r) => r.entry >= lo && r.entry < edges[i + 1]); return { lo, hi: Math.min(1, edges[i + 1]), n: x.length, won: x.filter((r) => r.exit === 1).length, avg: x.length ? r3(x.reduce((s, r) => s + r.entry, 0) / x.length) : null }; });
+  const cards = {}; for (const r of done) { let c = null; try { c = r.ctx ? (typeof r.ctx === 'string' ? JSON.parse(r.ctx) : r.ctx).card : null; } catch (e) { c = null; } if (c) (cards[c] = cards[c] || []).push(r); }
+  let n = 0; let hit = 0; let ret = 0; let pay = 0;
+  for (const list of Object.values(cards)) {
+    if (list.length < 2) continue; const two = list.slice().sort((x, y) => y.entry - x.entry).slice(0, 2);
+    const cost = (p) => p + 0.07 * p * (1 - p); const payout = 1 / (cost(two[0].entry) * cost(two[1].entry)); // $1 rolled through both, fees in
+    n++; pay += payout; if (two[0].exit === 1 && two[1].exit === 1) { hit++; ret += payout - 1; } else ret -= 1;
+  }
+  return { fights: done.length, won: done.filter((r) => r.exit === 1).length, buckets, roll: { cards: n, hit, avgPayout: n ? r2(pay / n) : null, avgReturn: n ? r3(ret / n) : null } };
 }
 
 // Tennis, after the first set: the live model against the price to buy. One look per set.

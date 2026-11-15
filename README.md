@@ -43,3 +43,8 @@ Never put the key in the code or the page.
 - `nfl_dog_lead`: a game priced close before kick-off where the underdog's price crosses 62¢. Sell at 80¢. Backed by 137 past games.
 - `nba_recovery`, `score_follow`, `tennis_reprice`: new, no record yet. They exist so the record can say whether they work.
 - `injury_news`, `whale_add`: not trades to copy. They measure how the price moves after late injury news and after a big whale add, and grade each whale by sport.
+
+## UFC
+`lib/ufc.js` lists Kalshi's fight markets (`KXUFCFIGHT`) and, on a fight's page, its method, rounds and distance markets. Served through `/api/sports?league=ufc`.
+There is no live round feed yet, and Kalshi's time on a bout is its expected result time, not the walkout, so the app does not claim a fight is under way.
+The engine's `ufc_fav` setup buys every favourite on paper when the bout before it ends and holds to the result. It is record keeping, not a tip: it builds our own table of how often favourites win at each price, and what rolling the two biggest favourites of a card returns.

@@ -10,6 +10,7 @@ const { param } = require('../lib/http');
 module.exports = (req, res) => send(res, 30, async () => {
   const t = Date.now();
   if (param(req, 'only') === 'logger') { const r = await fetch('https://court-edge-logger.jnikam1.workers.dev/' + (param(req, 'path') || 'status'), { headers: { Accept: 'application/json' } }); return r.json(); }
+  if (param(req, 'only') === 'ufc') return { asOf: new Date().toISOString(), ufc: await require('../lib/ufc').diag() };
   if (param(req, 'only') === 'sports') return { asOf: new Date().toISOString(), sports: await sports.diag() }; // NBA and NFL sources on their own
   const part = async (fn) => { const s = Date.now(); try { return Object.assign(await fn(), { ms: Date.now() - s }); } catch (e) { return { error: String(e.message || e), ms: Date.now() - s }; } };
   const [f, m, p, k] = await Promise.all([

@@ -116,10 +116,10 @@
   var feedOf = function (ev) { return leagueOf(ev) || 't'; };
   var detailUrl = function (ev) { var l = leagueOf(ev); return l ? '/api/sports?league=' + l + '&event=' + encodeURIComponent(ev) : '/api/match?event=' + encodeURIComponent(ev); };
   function quotes(events, pmEvents) {
-    var need = { t: false, nba: false, nfl: false }; events.forEach(function (e) { need[feedOf(e)] = true; });
+    var need = { t: false, nba: false, nfl: false, ufc: false }; events.forEach(function (e) { need[feedOf(e)] = true; });
     var calls = [];
     if (need.t) calls.push(get('/api/scan').then(function (d) { (d.matches || []).forEach(function (m) { Q.by[m.event] = m; }); Q.at.t = Date.now(); }).catch(function () {}));
-    ['nba', 'nfl'].forEach(function (l) { if (need[l]) calls.push(get('/api/sports?league=' + l).then(function (d) { (d.games || []).forEach(function (m) { Q.by[m.event] = m; }); Q.at[l] = Date.now(); }).catch(function () {})); });
+    ['nba', 'nfl', 'ufc'].forEach(function (l) { if (need[l]) calls.push(get('/api/sports?league=' + l).then(function (d) { (d.games || []).forEach(function (m) { Q.by[m.event] = m; }); Q.at[l] = Date.now(); }).catch(function () {})); });
     // A held position also reads its matchup: the model's live estimate, and the Polymarket quote (which has no list feed here).
     (pmEvents || []).forEach(function (ev) { calls.push(get(detailUrl(ev)).then(function (d) { var pm = d.pm || d.polymarket; Q.pm[ev] = { bid: pm && pm.bid ? pm.bid : null, t: Date.now() }; Q.dt[ev] = { model: d.model && d.model.live && has(d.model.live.a) ? d.model.live.a : null, t: Date.now() }; }).catch(function () {})); });
     return Promise.all(calls).then(function () { Q.t = Date.now(); return Q.by; });
@@ -286,6 +286,7 @@
     return wrapCard(matchRow(m, { lg: m.tournament || m.tourLabel || m.tour || 'Tennis', st: st, live: live && m.state !== 'closing', cells: cells, srv: f ? f.server : null, sub: !sets && m.set1 && m.set1.winner ? [m.set1.winner === 'a' ? 'won set 1' : '', m.set1.winner === 'b' ? 'won set 1' : ''] : null, ctx: ctx }), m);
   }
   function gState(m) {
+    if (m.league === 'ufc' && m.state === 'upcoming') return m.when || 'Upcoming';
     if (m.state === 'live') return m.text || 'In play';
     if (m.state === 'closing') return 'Final · settling';
     return m.start ? day(m.start) + ' ' + clock(m.start) : 'Not started';
@@ -296,6 +297,7 @@
     var ctx = el('div', 'ctx'); var gap = m.gap && m.gap.edge >= 0.03 && m.state === 'upcoming';
     if (gap) add(ctx, el('b', '', 'Gap '), document.createTextNode(m[m.gap.side].name + ' at ' + cents(m.gap.ask) + ', ' + m.book.name + ' fair ' + cents(m.gap.fair) + '. '));
     else if (on && m.sit && m.sit.text) ctx.appendChild(document.createTextNode(m.sit.text + ' '));
+    else if (m.blurb) ctx.appendChild(document.createTextNode((m.note ? m.note + '. ' : '') + m.blurb + ' '));
     else if (!on && m.book && has(m.book.a)) ctx.appendChild(document.createTextNode(m.book.name + ' fair ' + cents(m.book.a) + ' / ' + cents(m.book.b) + (m.book.text ? ' · ' + m.book.text : '') + ' '));
     var inj = []; ['a', 'b'].forEach(function (k) { ((m.inj && m.inj[k]) || []).forEach(function (i) { inj.push(last(i.name) + ' ' + i.tag.toLowerCase()); }); });
     if (inj.length) ctx.appendChild(el('span', 'inj', inj.slice(0, 3).join(', ')));
@@ -306,7 +308,7 @@
     add(g, el('span', 'colhead', ''), el('span', 'colhead', ''), el('span', 'colhead', 'Sell'), el('span', 'colhead', 'Buy'));
     ['a', 'b'].forEach(function (k) {
       var p = m[k], o = m[k === 'a' ? 'b' : 'a']; var name = el('span', 'name', p.name);
-      add(name, document.createTextNode(' '), el('small', 'at', [p.record, k === 'b' ? 'home' : null].filter(Boolean).join(' · ')));
+      add(name, document.createTextNode(' '), el('small', 'at', [p.record, k === 'b' && m.league !== 'ufc' ? 'home' : null].filter(Boolean).join(' · ')));
       var cells = el('span', 'sets'); if (on && has(p.score)) cells.appendChild(el('b', 'sc ' + (m.state === 'closing' ? (p.score > o.score ? 'w' : '') : 'cur'), String(p.score)));
       add(g, name, cells, el('span', 'num', cents(p.bid)), el('span', 'num', cents(p.ask)));
     });
@@ -314,9 +316,9 @@
   }
   function ago2(t) { var s = Math.max(0, Math.floor(Date.now() / 1000) - t); return s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; }
 
-  var SPORTS = [['all', 'All'], ['tennis', 'Tennis'], ['nba', 'NBA'], ['nfl', 'NFL']];
-  var D = { src: { tennis: null, nba: null, nfl: null }, err: {}, at: {}, sport: 'all', when: '', q: '' };
-  try { var s0 = localStorage.getItem('ce-sport2'); if (s0 === 'tennis' || s0 === 'nba' || s0 === 'nfl') D.sport = s0; var w0 = localStorage.getItem('ce-when'); if (w0 === 'live' || w0 === 'up') D.when = w0; } catch (e) {}
+  var SPORTS = [['all', 'All'], ['tennis', 'Tennis'], ['nba', 'NBA'], ['nfl', 'NFL'], ['ufc', 'UFC']];
+  var D = { src: { tennis: null, nba: null, nfl: null, ufc: null }, err: {}, at: {}, sport: 'all', when: '', q: '' };
+  try { var s0 = localStorage.getItem('ce-sport2'); if (s0 === 'tennis' || s0 === 'nba' || s0 === 'nfl' || s0 === 'ufc') D.sport = s0; var w0 = localStorage.getItem('ce-when'); if (w0 === 'live' || w0 === 'up') D.when = w0; } catch (e) {}
   function drawFilters() {
     var box = $('fSport'); box.replaceChildren();
     SPORTS.forEach(function (o) {
@@ -336,7 +338,7 @@
     if (want('tennis') && D.src.tennis) (D.src.tennis.matches || []).forEach(function (m) {
       rows.push({ m: m, sport: 'tennis', live: m.state !== 'upcoming', gap: !!(m.call && m.call.live && m.call.bet), t: m.pm && m.pm.start ? Date.parse(m.pm.start) / 1000 : 0, text: (m.a.name + ' ' + m.b.name + ' ' + (m.tournament || '') + ' tennis').toLowerCase() });
     });
-    ['nba', 'nfl'].forEach(function (k) {
+    ['nba', 'nfl', 'ufc'].forEach(function (k) {
       if (want(k) && D.src[k]) (D.src[k].games || []).forEach(function (m) {
         rows.push({ m: m, sport: k, live: m.state !== 'upcoming', gap: m.state === 'upcoming' && !!(m.gap && m.gap.edge >= 0.03), t: m.start || 0, text: (m.a.name + ' ' + m.b.name + ' ' + (m.a.full || '') + ' ' + (m.b.full || '') + ' ' + m.a.code + ' ' + m.b.code + ' ' + k).toLowerCase() });
       });
@@ -345,8 +347,8 @@
     return rows;
   }
   function renderDiscover() {
-    var rows = discoverRows(); var names = { tennis: 'tennis matches', nba: 'NBA games', nfl: 'NFL games' };
-    var wanted = D.sport === 'all' ? ['tennis', 'nba', 'nfl'] : [D.sport];
+    var rows = discoverRows(); var names = { tennis: 'tennis matches', nba: 'NBA games', nfl: 'NFL games', ufc: 'UFC fights' };
+    var wanted = D.sport === 'all' ? ['tennis', 'nba', 'nfl', 'ufc'] : [D.sport];
     var loading = wanted.filter(function (k) { return !D.src[k] && !D.err[k]; }); var failed = wanted.filter(function (k) { return D.err[k]; });
     var put = function (id, items, emptyText, head) {
       var box = $(id); box.replaceChildren();
@@ -359,7 +361,7 @@
       if (D.q) return 'Nothing ' + (kind === 'listed' ? '' : kind + ' ') + 'matches "' + D.q + '". Check the spelling, or clear the search.';
       if (failed.length === wanted.length) return 'Could not load ' + what + '. Trying again every 15 seconds.';
       if (kind === 'live') return 'No ' + what + ' in play right now.';
-      return 'No ' + what + (kind === 'listed' ? ' are listed' : ' ' + kind) + ' on Kalshi right now.' + (D.sport === 'nba' || D.sport === 'nfl' ? ' Games appear here as soon as Kalshi lists them.' : '');
+      return 'No ' + what + (kind === 'listed' ? ' are listed' : ' ' + kind) + ' on Kalshi right now.' + (D.sport === 'nba' || D.sport === 'nfl' ? ' Games appear here as soon as Kalshi lists them.' : D.sport === 'ufc' ? ' Fights appear here when Kalshi lists the next card.' : '');
     };
     var gaps = rows.filter(function (r) { return r.gap; }); $('secGaps').hidden = !gaps.length || D.when === 'up' && !gaps.some(function (r) { return !r.live; });
     if (gaps.length) put('bets', gaps, '', 'To win');
@@ -392,7 +394,7 @@
     if (nosc.length) s.appendChild(document.createTextNode(' · ' + nosc.map(function (k) { return k.toUpperCase(); }).join(' and ') + ' scores are not answering, showing prices only'));
   }
   function loadDiscover() {
-    (D.sport === 'all' ? ['tennis', 'nba', 'nfl'] : [D.sport]).forEach(function (k) {
+    (D.sport === 'all' ? ['tennis', 'nba', 'nfl', 'ufc'] : [D.sport]).forEach(function (k) {
       get(k === 'tennis' ? '/api/scan' : '/api/sports?league=' + k).then(function (d) {
         D.src[k] = d; D.at[k] = Date.now(); delete D.err[k];
         (k === 'tennis' ? d.matches || [] : d.games || []).forEach(function (m) { Q.by[m.event] = m; });
@@ -401,7 +403,7 @@
     });
   }
   var onDiscover = function () { return location.hash === '' || location.hash === '#'; };
-  var leagueOf = function (ev) { return /^KXNBA/.test(ev) ? 'nba' : /^KXNFL/.test(ev) ? 'nfl' : null; };
+  var leagueOf = function (ev) { return /^KXNBA/.test(ev) ? 'nba' : /^KXNFL/.test(ev) ? 'nfl' : /^KXUFC/.test(ev) ? 'ufc' : null; };
 
   // ---------- NBA and NFL game page ----------
   var pct0 = function (x) { return has(x) ? Math.round(x * 100) + '%' : '–'; }; // model estimates are chances, shown as %, never as a price
@@ -425,6 +427,7 @@
     if (d.weather && d.weather.text) bits.push(d.weather.text + (has(d.weather.temp) ? ' ' + d.weather.temp + '°F' : ''));
     bits.push('Kalshi volume ' + usd(d.volume).replace('$', '') + ' contracts');
     if (!d.hasScores) bits.push('No live score feed for this game');
+    if (d.league === 'ufc' && d.note) bits.unshift(d.note);
     add(box, el('div', 'small', bits.join(' · ')), venueLinks(d, d.pm ? d.pm.slug : null));
   }
   function gInj(d) {
@@ -457,6 +460,13 @@
     box.appendChild(kv);
     if (d.book && has(d.book.mlA)) box.appendChild(el('div', 'small', d.book.name + ' moneyline: ' + d.a.name + ' ' + d.book.mlA + ', ' + d.b.name + ' ' + d.book.mlB + '.'));
     box.appendChild(el('div', 'small', d.state === 'live' ? 'The score model treats the score gap as a random walk around the pre-game price. It knows the score and the clock, not who has the ball or who is on the floor.' : 'When these agree there is nothing to do. When Kalshi is the odd one out, look for the reason before assuming it is wrong.'));
+  }
+  function fightProps(d) { // other Kalshi markets on the same bout
+    var box = $('gdLines'); box.replaceChildren(); var P = d.props || [];
+    if (!P.length) { box.appendChild(el('div', 'small', 'No method, rounds or distance markets are listed for this bout right now.')); return; }
+    var grp = null; var kv = null;
+    P.forEach(function (x) { if (x.group !== grp) { grp = x.group; box.appendChild(el('div', 'sub', grp)); kv = el('div', 'kv'); add(kv, el('span', 'k', ''), el('span', 'h', 'Sell'), el('span', 'h', 'Buy')); box.appendChild(kv); } add(kv, el('span', 'k', x.title), el('span', 'num', cents(x.bid)), el('span', 'num', cents(x.ask))); });
+    box.appendChild(el('div', 'small', 'Kalshi prices. These markets are thinner than the fight winner.'));
   }
   function gLines(d) {
     var box = $('gdLines'); box.replaceChildren(); var L = d.lines || {}; var flagged = [];
@@ -514,7 +524,7 @@
   }
   function loadGameWallets() {
     var ev = cur.event; var d = cur.d; var box = $('gdWal'); if (!d) return;
-    if (!d.pm || !d.pm.cond) { box.replaceChildren(el('div', 'small', 'No matching Polymarket market found for this game.')); return; }
+    if (!d.pm || !d.pm.cond) { box.replaceChildren(el('div', 'small', d.league === 'ufc' ? 'Polymarket is not matched for fights yet.' : 'No matching Polymarket market found for this game.')); return; }
     get('/api/wallet?cond=' + d.pm.cond).then(function (r) {
       if (ev !== cur.event) return; box.replaceChildren();
       (r.sides || []).forEach(function (sd) {
@@ -527,7 +537,9 @@
     }).catch(function () { if (ev === cur.event) box.replaceChildren(el('div', 'small err', 'Could not load Polymarket wallets.')); });
   }
   function renderGame(d) {
-    cur.d = d; gHead(d); read(d); calc(d); chart(d); gInj(d); gFair(d); gLines(d); gStrength(d); gForm(d);
+    cur.d = d; gHead(d); read(d); calc(d); chart(d);
+    if (d.league === 'ufc') { ['gdInj', 'gdFair', 'gdStr', 'gdForm'].forEach(function (id) { $(id).replaceChildren(); }); fightProps(d); }
+    else { gInj(d); gFair(d); gLines(d); gStrength(d); gForm(d); }
     var cond = d.pm ? d.pm.cond : null; if (cur.pmCond !== cond) { cur.pmCond = cond; loadGameWallets(); }
     var s = $('dStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · refreshes every 10s'));
   }
@@ -1254,6 +1266,13 @@
         top.appendChild(el('span', 'chip' + (s.n && s.avg > 0 ? ' good' : ''), s.n ? sg(s.avg) + ' a contract' : 'No closed trades yet'));
         add(c, top, el('div', 'small', (s.n ? s.n + ' closed, ' + s.won + ' reached the target or won' + (s.m15 !== null ? ', price ' + sg(s.m15) + ' after 15 min' : '') + '. ' : '') + (s.open ? s.open + ' open now. ' : '') + s.basis)); box.appendChild(c);
       });
+      var U = d.ufc; if (U && U.fights) {
+        box.appendChild(el('div', 'list-head', 'UFC favourites, our own record'));
+        var uc = el('div', 'card'); var kv = el('div', 'kv k4'); add(kv, el('span', 'k', 'Price at the bell'), el('span', 'h', 'Fights'), el('span', 'h', 'Won'), el('span', 'h', 'Avg price'));
+        U.buckets.forEach(function (b) { add(kv, el('span', 'k', Math.round(b.lo * 100) + '¢ to ' + Math.round(b.hi * 100) + '¢'), el('span', 'num', String(b.n)), el('span', 'num', b.n ? Math.round(b.won / b.n * 100) + '%' : '–'), el('span', 'num', b.n ? cents(b.avg) : '–')); });
+        add(uc, kv, el('div', 'small', U.won + ' of ' + U.fights + ' favourites won. ' + (U.roll.cards ? 'Rolling the two biggest favourites of each card into each other: ' + U.roll.hit + ' of ' + U.roll.cards + ' cards paid, average payout ' + U.roll.avgPayout + 'x, average return ' + (U.roll.avgReturn >= 0 ? '+' : '') + Math.round(U.roll.avgReturn * 100) + '% a card after fees.' : 'The two-favourite roll needs a finished card.')));
+        box.appendChild(uc);
+      }
       var rows = (d.signals || []).slice(0, 12);
       if (rows.length) box.appendChild(el('div', 'list-head', 'Latest paper trades'));
       rows.forEach(function (r) {
