@@ -51,8 +51,8 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
   await check('whale alerts: a whale that sold out is not reported as holding', async () => {
     const realFetch = global.fetch; const now = Math.floor(Date.now() / 1000);
     const buy = { type: 'TRADE', side: 'BUY', timestamp: now - 600, condition_id: '0xabc', outcome_index: 0, slug: 'nba-aaa-bbb-2026-11-13', title: 'A v B', usdc_size: 60000, size: 100000, price: 0.6 };
-    let positions = [];
-    global.fetch = async (url) => ({ ok: true, status: 200, json: async () => (String(url).includes('/activity') ? { data: [buy], pagination: { has_more: false } } : { data: positions }) });
+    let positions = []; let trades = [buy];
+    global.fetch = async (url) => ({ ok: true, status: 200, json: async () => (String(url).includes('/activity') ? { data: trades, pagination: { has_more: false } } : { data: positions }) });
     try {
       delete require.cache[require.resolve('../lib/alerts')]; const { check: scanOne } = require('../lib/alerts');
       const w = { w: '0xwhale', name: 'Whale', cats: [{ k: 'NBA', grade: 'strong', net: 100000, n: 50, roi: 0.05 }] }; const o = { minutes: 180, minStake: 50000, minAdd: 10000, maxPages: 2 };
@@ -61,6 +61,8 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       assert.strictEqual((await scanOne(w, now - 10800, o)).alerts.length, 0, 'most of it sold: $12k left is under the $50k bar');
       positions = [{ status: 'OPEN', outcome_index: 0, outcome: 'A', current_size: 100000, total_size: 100000, avg_price: 0.6, current_price: 0.62, first_entry_at: now - 600 }];
       const a = (await scanOne(w, now - 10800, o)).alerts; assert.strictEqual(a.length, 1); assert.strictEqual(a[0].stake, 60000);
+      trades = [buy, Object.assign({}, buy, { side: 'SELL', timestamp: now - 300 })]; assert.strictEqual((await scanOne(w, now - 10800, o)).alerts.length, 0, 'bought and sold the same amount: not an add');
+      trades = [buy, Object.assign({}, buy, { side: 'SELL', usdc_size: 20000, timestamp: now - 300 })]; assert.strictEqual((await scanOne(w, now - 10800, o)).alerts[0].added, 40000, 'the add is what it bought less what it sold');
     } finally { global.fetch = realFetch; }
   });
 
@@ -135,10 +137,17 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     assert.deepStrictEqual(B.manage(sig, { bid: 0.5, ask: 0.51, behind: 8 }, now + 60), { last: 0.5, hi: 0.5, lo: 0.5 });
     const hit = B.manage(sig, { bid: 0.57, ask: 0.58, behind: 2 }, now + 600); assert.strictEqual(hit.status, 'target'); assert.strictEqual(hit.exit, 0.56); assert.strictEqual(hit.net, 9.8); // 12¢ less 1.7¢ to get in and 0.4¢ to get out
     assert.strictEqual(B.manage(sig, { bid: 0.3, ask: 0.31, behind: 21 }, now + 600).status, 'invalid'); assert.strictEqual(B.manage(sig, { bid: 0.4, ask: 0.41, behind: 9 }, now + 2400).status, 'deadline');
-    const lost = B.manage(sig, { bid: 0, ask: 0.02, behind: 30, state: 'live' }, now + 900); assert.strictEqual(lost.status, 'settled'); assert.strictEqual(lost.exit, 0); assert.ok(lost.net < -44);
-    assert.deepStrictEqual(B.manage(sig, null, now + 300), {}, 'a missing quote is waited out'); assert.strictEqual(B.manage(Object.assign({ last: 0.95 }, sig), null, now + 3100).status, 'settled');
-    const tn = { event: 'T', state: 'set2', live: { a: 0.74 }, pm: { sets: [[6, 3], [1, 0]] }, a: { name: 'A One', ask: 0.63, bid: 0.62 }, b: { name: 'B Two', ask: 0.38, bid: 0.37 } };
+    // a result is only ever taken from the exchange
+    assert.strictEqual(B.manage(Object.assign({}, sig, { target: null, deadline: null }), { bid: 0.98, ask: 0.99, state: 'closing' }, now + 900).status, undefined, 'a 98¢ bid is not a win');
+    const won = B.manage(sig, { bid: 0.98, ask: 0.99, result: 'yes' }, now + 900); assert.strictEqual(won.status, 'settled'); assert.strictEqual(won.exit, 1);
+    const lost = B.manage(sig, { bid: null, ask: null, result: 'no' }, now + 900); assert.strictEqual(lost.status, 'settled'); assert.strictEqual(lost.exit, 0); assert.ok(lost.net < -44);
+    assert.deepStrictEqual(B.manage(sig, null, now + 300), {}, 'a missing quote is waited out');
+    assert.strictEqual(B.manage(Object.assign({ last: 0.95 }, sig), null, now + 3100).status, 'void', 'a last price of 95¢ and no result is thrown out, not booked as a win');
+    assert.deepStrictEqual(B.manage(Object.assign({ last: 0.95 }, sig, { deadline: null }), null, now + 86400), {}, 'a hold-to-result trade stays pending until the exchange answers');
+    const tn = { event: 'T', state: 'set2', live: { a: 0.74, known: true, srv: 'a', at: now - 40 }, pm: { sets: [[6, 3], [1, 0]] }, a: { name: 'A One', ask: 0.63, bid: 0.62 }, b: { name: 'B Two', ask: 0.38, bid: 0.37 } };
     const ts = B.tennisSignals(tn, now); assert.strictEqual(ts.length, 1); assert.strictEqual(ts[0].side, 'a'); assert.strictEqual(ts[0].target, 0.73); assert.strictEqual(B.tennisSignals(Object.assign({}, tn, { state: 'set1' }), now).length, 0);
+    assert.strictEqual(B.tennisSignals(Object.assign({}, tn, { live: { a: 0.74, known: false, at: now - 40 } }), now).length, 0, 'server or point score unknown: no entry');
+    assert.strictEqual(B.tennisSignals(Object.assign({}, tn, { live: { a: 0.74, known: true, at: now - 400 } }), now).length, 0, 'a score older than two and a half minutes: no entry');
     const grades = B.whaleGrades([{ setup: 'whale_add', lg: 'NBA', name: 'w1', status: 'deadline', net: 6 }, { setup: 'whale_add', lg: 'NBA', name: 'w2', status: 'deadline', net: -2 }]);
     assert.strictEqual(grades[0].whale, 'w1'); assert.ok(grades[0].grade < 6 && grades[0].grade > 2, 'one good add is pulled toward the category average');
   });
@@ -158,8 +167,9 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     const s = B.fightSignals(g, now); assert.strictEqual(s.length, 1); assert.strictEqual(s[0].name, 'Ciryl Gane'); assert.strictEqual(s[0].entry, 0.67); assert.strictEqual(s[0].target, null); assert.strictEqual(s[0].ctx.card, '26NOV14');
     assert.strictEqual(B.fightSignals(Object.assign({}, g, { state: 'closing' }), now).length, 0, 'not once the price says it is decided'); assert.strictEqual(B.fightSignals(Object.assign({}, g, { ab: 0.97, aa: 0.98 }), now).length, 0);
     assert.strictEqual(B.fightSignals(Object.assign({}, g, { ab: 0.3, aa: 0.31, bb: 0.69, ba: 0.7 }), now)[0].name, 'Josh Hokit', 'the favourite is whoever is priced higher');
-    const won = B.manage(Object.assign({ last: null }, s[0]), { bid: 0.98, ask: 0.99, state: 'closing' }, now + 900); assert.strictEqual(won.status, 'settled'); assert.strictEqual(won.exit, 1); assert.strictEqual(won.net, Math.round((33 - 7 * 0.67 * 0.33) * 10) / 10);
-    const lost = B.manage(Object.assign({ last: null }, s[0]), { bid: 0.01, ask: 0.02, state: 'closing' }, now + 900); assert.strictEqual(lost.exit, 0);
+    assert.deepStrictEqual(Object.keys(B.manage(Object.assign({ last: null }, s[0]), { bid: 0.98, ask: 0.99, state: 'closing' }, now + 900)).includes('status'), false, 'no result yet: still open');
+    const won = B.manage(Object.assign({ last: null }, s[0]), { bid: 0.98, ask: 0.99, result: 'yes' }, now + 900); assert.strictEqual(won.status, 'settled'); assert.strictEqual(won.exit, 1); assert.strictEqual(won.net, Math.round((33 - 7 * 0.67 * 0.33) * 10) / 10);
+    const lost = B.manage(Object.assign({ last: null }, s[0]), null, now + 900); assert.deepStrictEqual(lost, {});
     const R = (card, entry, exit) => ({ setup: 'ufc_fav', status: 'settled', entry, exit, ctx: JSON.stringify({ card }) });
     const st = B.favStats([R('A', 0.8, 1), R('A', 0.7, 1), R('A', 0.55, 0), R('B', 0.85, 1), R('B', 0.75, 0), R('C', 0.9, 1), { setup: 'ufc_fav', status: 'open', entry: 0.6 }]);
     assert.strictEqual(st.fights, 6); assert.strictEqual(st.won, 4); assert.deepStrictEqual(st.buckets.map((b) => [b.n, b.won]), [[1, 0], [0, 0], [2, 1], [3, 3]]);
@@ -214,6 +224,36 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       result = 'no'; await run([]);                                     // its market is gone too: Kalshi says the favourite lost
       const d = db.prepare("SELECT * FROM signals WHERE setup = 'ufc_fav'").get(); assert.strictEqual(d.status, 'settled'); assert.strictEqual(d.exit, 0); assert.ok(d.net < -67);
       const res = await (await worker.fetch(new Request('https://logger.test/signals'), env)).json(); assert.strictEqual(res.ufc.fights, 1); assert.strictEqual(res.ufc.won, 0); assert.strictEqual(res.signals.length, 0, 'record keeping stays out of the trade list');
+      assert.strictEqual(JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'last'").get().v).brainError, undefined);
+    } finally { global.fetch = realFetch; Date.now = realNow; }
+  });
+
+  await check('engine: a whale add is priced on its own market after the wallet switches sides, and a timed exit is announced', async () => {
+    let sqlite; try { sqlite = require('node:sqlite'); } catch (e) { return; }
+    const db = new sqlite.DatabaseSync(':memory:');
+    const st = (sql, args) => ({ bind: (...a) => st(sql, a), first: async () => db.prepare(sql).get(...args) || null, all: async () => ({ results: db.prepare(sql).all(...args) }), run: async () => db.prepare(sql).run(...args), go: () => db.prepare(sql).run(...args) });
+    const env = { APP_URL: 'https://app.test', DB: { prepare: (sql) => st(sql, []), batch: async (list) => list.map((x) => x.go()) } };
+    const worker = (await import(path.join(root, 'worker/src/index.js') + '?pins')).default;
+    let feed = {}; let prices = ['0.60', '0.40']; const realFetch = global.fetch; const realNow = Date.now; let clock = 1794800000000;
+    global.fetch = async (u) => { u = String(u);
+      if (u.indexOf('gamma-api') >= 0) return { ok: true, status: 200, json: async () => [{ conditionId: '0xc0', outcomes: '["Gen.G", "Bilibili Gaming"]', outcomePrices: JSON.stringify(prices) }] };
+      if (u.indexOf('kalshi.com') >= 0) return { ok: true, status: 200, json: async () => ({ market: { result: '' } }) };
+      const k = Object.keys(feed).find((x) => u.indexOf(x) >= 0); return { ok: true, status: 200, json: async () => (k ? feed[k] : {}) }; };
+    Date.now = () => clock;
+    const run = async (games, alerts, mins) => { feed = { '/api/sports': { games: games || [], inj: [], teams: [], feeds: {} }, '/api/alerts': { alerts: alerts || [] }, '/api/scan': { matches: [] } }; let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; clock += (mins || 1) * 60000; };
+    const add = (outcome, cur, last) => ({ id: '0xw|lol-final', grouped: true, whale: 'flipper', w: '0xw', cat: 'Esports', title: 'Final', cond: '0xc0', outcome, other: 'x', added: 60000, paid: cur, stake: 60000, cur, last, lean: 'for', net: { for: 100000, against: 0 } });
+    const nbaG = (sa, sb, aa) => [{ lg: 'nba', event: 'KXNBAGAME-26NOV15SASMEM', state: sa === null ? 'upcoming' : 'live', a: 'SAS', b: 'MEM', an: 'Spurs', bn: 'Grizzlies', at: 'T-SAS', bt: 'T-MEM', ab: aa - 0.01, aa, bb: Math.round((0.99 - aa) * 100) / 100, ba: Math.round((1.01 - aa) * 100) / 100, sa, sb, period: sa === null ? null : 2, clock: 600, book: null }];
+    try {
+      await run(nbaG(null, null, 0.71));                                // start-up minute: nothing is alerted
+      await run(nbaG(null, null, 0.71), [add('Gen.G', 0.6, 10)]);       // the whale buys Gen.G at 60¢
+      const w0 = db.prepare("SELECT * FROM signals WHERE setup = 'whale_add'").get(); assert.strictEqual(w0.side, 'Gen.G'); assert.strictEqual(JSON.parse(w0.ctx).cond, '0xc0');
+      prices = ['0.45', '0.55'];                                        // Gen.G falls to 45¢, and the wallet's card now leads with Bilibili at 55¢
+      await run(nbaG(30, 38, 0.30), [add('Bilibili Gaming', 0.55, 20)], 61); // also: a Spurs recovery trade opens here
+      const rec = db.prepare("SELECT * FROM signals WHERE setup = 'nba_recovery'").get(); assert.ok(rec && rec.status === 'open', 'the NBA recovery trade is open');
+      await run(nbaG(32, 40, 0.31), [add('Bilibili Gaming', 0.55, 20)]);    // an hour on: the whale add and the NBA trade both reach their deadline
+      const w1 = db.prepare("SELECT * FROM signals WHERE id = ?").get(w0.id); assert.strictEqual(w1.status, 'deadline'); assert.strictEqual(w1.exit, 0.45, 'valued on Gen.G, the side it was opened on'); assert.strictEqual(w1.net, -15);
+      const r1 = db.prepare("SELECT * FROM signals WHERE setup = 'nba_recovery'").get(); assert.strictEqual(r1.status, 'deadline');
+      const notes = JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'notes'").get().v); const out = notes.find((n) => n.id === 'x-' + r1.id); assert.ok(out && /time is up/.test(out.title), 'the timed exit reaches the phone');
       assert.strictEqual(JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'last'").get().v).brainError, undefined);
     } finally { global.fetch = realFetch; Date.now = realNow; }
   });

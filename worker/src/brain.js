@@ -120,6 +120,9 @@ export function favStats(rows) {
 // Tennis, after the first set: the live model against the price to buy. One look per set.
 export function tennisSignals(m, now) {
   const out = []; if (!m || !m.live || num(m.live.a) === null || !m.pm || !m.pm.sets || (m.state !== 'set2' && m.state !== 'decider')) return out;
+  // The estimate moves by ten points or more with the server and the point score. Without both, and without a score
+  // read in the last two and a half minutes, an apparent gap can be the wrong way round, so nothing is opened.
+  if (!m.live.known || !num(m.live.at) || now - m.live.at > 150) return out;
   const nSets = m.pm.sets.length;
   for (const k of ['a', 'b']) {
     const fair = k === 'a' ? m.live.a : 1 - m.live.a; const ask = num(m[k].ask); if (ask === null || ask <= 0.05 || ask >= 0.93) continue;
@@ -147,13 +150,12 @@ export function netCents(sig, status, exit) {
 export function manage(sig, q, now) {
   const up = {}; const done = (status, exit) => Object.assign(up, { status, exit, exit_t: now, net: netCents(sig, status, exit) });
   const age = now - sig.t; const ctx = sig.ctx || {};
+  // A result only counts when the exchange has confirmed it. A 97¢ bid or a vanished quote proves nothing.
+  if (q && (q.result === 'yes' || q.result === 'no')) return done('settled', q.result === 'yes' ? 1 : 0);
   if (!q || num(q.bid) === null && num(q.ask) === null) {
-    // no quote: wait a while, then close on the last price seen
-    const lastSeen = num(sig.last);
-    if (sig.deadline && now >= sig.deadline + 600 || age > 6 * 3600) {
-      if (lastSeen === null) return done('void', sig.entry);
-      return lastSeen >= 0.9 ? done('settled', 1) : lastSeen <= 0.1 ? done('settled', 0) : done('deadline', lastSeen);
-    }
+    // No quote and no confirmed result: keep waiting. A timed trade that cannot be priced at its deadline is thrown out,
+    // not guessed, and a hold-to-result trade is thrown out only after three days without an answer.
+    if (sig.deadline ? now >= sig.deadline + 600 : age > 3 * 86400) return done('void', sig.entry);
     return up;
   }
   const bid = num(q.bid) !== null ? q.bid : 0; const ask = num(q.ask);
@@ -162,10 +164,6 @@ export function manage(sig, q, now) {
   if (num(sig.lo) === null || bid < sig.lo) up.lo = bid;
   if (num(sig.m5) === null && age >= 300) up.m5 = bid;
   if (num(sig.m15) === null && age >= 900) up.m15 = bid;
-  if (sig.setup !== 'whale_add') {
-    if (bid >= 0.97) return done('settled', 1);
-    if (ask !== null && ask > 0 && ask <= 0.03 || q.state === 'closing' && bid <= 0.05) return done('settled', 0);
-  }
   if (num(sig.target) !== null && bid >= sig.target - 1e-9) return done('target', sig.target);
   if (ctx.maxBehind && num(q.behind) !== null && q.behind >= ctx.maxBehind) return done('invalid', bid);
   if (ctx.sets && num(q.sets) !== null && q.sets > ctx.sets) return done('deadline', bid);

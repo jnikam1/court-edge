@@ -1,4 +1,4 @@
-import { SETUPS, gameSignals, tennisSignals, fightSignals, favStats, manage, summarize, whaleGrades, cents } from './brain.js';
+import { SETUPS, gameSignals, tennisSignals, fightSignals, favStats, manage, netCents, summarize, whaleGrades, cents } from './brain.js';
 // Court Edge logger (Cloudflare Worker).
 // Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
 // in play and each NBA or NFL game near its start, record new big whale adds and injury report
@@ -30,6 +30,7 @@ async function ensure(env) {
   if (ready) return; await env.DB.batch(SCHEMA.map((q) => env.DB.prepare(q)));
   try { await env.DB.prepare('ALTER TABLE inj ADD COLUMN big INTEGER DEFAULT 0').run(); } catch (e) { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE subs ADD COLUMN tested INTEGER').run(); } catch (e) { /* already there */ }
+  try { await env.DB.prepare('ALTER TABLE signals ADD COLUMN verified INTEGER').run(); } catch (e) { /* already there */ }
   ready = true;
 }
 
@@ -147,7 +148,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
       why: n.i.name + ' (' + n.i.teamName + ') ' + (n.fade ? 'is ' + n.i.tag.toLowerCase() : 'is cleared') + '. Tracks where the price is 5, 15 and 20 minutes later.' });
   }
   // wallet analyst: every big add, followed for an hour at the price we saw it
-  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97 && a.lean !== 'against' && !a.quiet) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
+  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97 && a.lean !== 'against' && !a.quiet) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, ctx: { cond: a.cond, outcome: a.outcome }, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
   // open the new ones
   let opened = 0;
   if (found.length) {
@@ -161,25 +162,54 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   }
   // position controller: every open paper trade against this minute's quote
   const open = ((await env.DB.prepare("SELECT * FROM signals WHERE status = 'open' ORDER BY t LIMIT 300").all()).results) || []; let closed = 0;
+  for (const sg of open) { try { sg.ctx = sg.ctx ? JSON.parse(sg.ctx) : null; } catch (e) { sg.ctx = null; } }
+  const wconds = [...new Set(open.filter((sg) => sg.setup === 'whale_add').map((sg) => (sg.ctx && sg.ctx.cond) || String(sg.event).split('|')[1]).filter((c) => /^0x/.test(String(c || ''))))];
+  const pm = wconds.length ? await pmPrices(wconds) : new Map();
   for (const sg of open) {
     if (sg.t === now) continue; // opened this minute
-    let q = null; let skip = false; sg.ctx = sg.ctx ? JSON.parse(sg.ctx) : null;
-    if (sg.setup === 'whale_add') { if (!al || !al.alerts) skip = true; else { const a = al.alerts.find((x) => x.id === sg.event); if (a) q = { bid: a.cur, ask: a.cur }; } }
+    let q = null; let skip = false;
+    if (sg.setup === 'whale_add') { // priced on the exact market and outcome it was opened on, whatever the wallet has done since
+      const cond = (sg.ctx && sg.ctx.cond) || (/^0x/.test(String(sg.event).split('|')[1] || '') ? String(sg.event).split('|')[1] : null);
+      if (!pm) skip = true; else { const px = cond && pm.get(cond) ? pm.get(cond)[String((sg.ctx && sg.ctx.outcome) || sg.side).toLowerCase()] : undefined; if (typeof px === 'number' && Number.isFinite(px)) q = { bid: px, ask: px }; }
+    }
     else if (sg.lg === 'tennis') { if (!scan || !scan.matches) skip = true; else { const m = byMatch.get(sg.event); if (m) q = { bid: m[sg.side].bid, ask: m[sg.side].ask, state: m.state, sets: m.pm && m.pm.sets ? m.pm.sets.length : null }; } }
     else if (!sp || !sp.games) skip = true;
     else { const g = byEvent.get(sg.event); if (g) q = { bid: sg.side === 'a' ? g.ab : g.bb, ask: sg.side === 'a' ? g.aa : g.ba, state: g.state, behind: g.sa === null || g.sa === undefined || g.sb === null || g.sb === undefined ? null : (sg.side === 'a' ? g.sb - g.sa : g.sa - g.sb) }; }
     if (skip) continue; // that feed did not answer this minute: leave the trade as it is
-    if (!q && sg.setup === 'ufc_fav' && sg.ticker) { // Kalshi closes a bout's market the moment it is decided, so ask Kalshi who won
-      const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets/' + encodeURIComponent(sg.ticker), { headers: { Accept: 'application/json' } }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-      const res = r && r.market ? String(r.market.result || '').toLowerCase() : '';
-      if (res === 'yes' || res === 'no') q = res === 'yes' ? { bid: 1, ask: 1, state: 'closing' } : { bid: 0, ask: 0.01, state: 'closing' };
+    // A Kalshi trade is settled only on Kalshi's own result. Ask for it when the quote is gone or looks decided.
+    if (sg.setup !== 'whale_add' && sg.ticker && (!q || q.state === 'closing' || q.bid >= 0.97 || (q.ask > 0 && q.ask <= 0.03) || (q.bid === null && q.ask === null))) {
+      const res = await kalshiResult(sg.ticker); if (res) q = Object.assign(q || { bid: null, ask: null }, { result: res });
     }
-    const up = manage(sg, q, now); const keys = Object.keys(up); if (!keys.length) continue;
+    const up = manage(sg, q, now); if (up.status === 'settled') up.verified = 1; const keys = Object.keys(up); if (!keys.length) continue;
     await env.DB.prepare('UPDATE signals SET ' + keys.map((k) => k + ' = ?').join(', ') + ' WHERE id = ?').bind(...keys.map((k) => nul(up[k])), sg.id).run();
     if (up.status) { closed++; const S = SETUPS[sg.setup];
-      if (S && S.push && (up.status === 'target' || up.status === 'invalid')) notes.push({ id: 'x-' + sg.id, t: now, kind: 'signal', url: sg.url || '/#alerts', title: sg.name + (up.status === 'target' ? ' reached the target, ' + cents(up.exit) : ': plan cancelled at ' + cents(up.exit)), body: S.label + '. Paper trade from ' + cents(sg.entry) + (up.net !== null ? ', ' + (up.net >= 0 ? '+' : '') + up.net + '¢ a contract after fees.' : '.') }); }
+      const how = { target: ' reached the target, ' + cents(up.exit || 0), invalid: ': plan cancelled, out at ' + cents(up.exit || 0), deadline: ': time is up, out at ' + cents(up.exit || 0), settled: up.exit === 1 ? ' won' : ' lost' }[up.status];
+      if (S && S.push && how) notes.push({ id: 'x-' + sg.id, t: now, kind: 'signal', url: sg.url || '/#alerts', title: sg.name + how, body: S.label + '. Paper trade from ' + cents(sg.entry) + (up.net !== null ? ', ' + (up.net >= 0 ? '+' : '') + up.net + '¢ a contract after fees.' : '.') }); }
   }
-  return { found: found.length, opened, open: open.length, closed };
+  // Results recorded before settlement was tied to the exchange: check a few each minute and correct or reopen them.
+  const old = ((await env.DB.prepare("SELECT * FROM signals WHERE status = 'settled' AND verified IS NULL AND setup != 'whale_add' AND ticker IS NOT NULL LIMIT 4").all()).results) || []; let fixed = 0;
+  for (const sg of old) {
+    const res = await kalshiResult(sg.ticker); fixed++;
+    if (res) { const exit = res === 'yes' ? 1 : 0; await env.DB.prepare('UPDATE signals SET exit = ?, net = ?, verified = 1 WHERE id = ?').bind(exit, netCents(sg, 'settled', exit), sg.id).run(); }
+    else await env.DB.prepare("UPDATE signals SET status = 'open', exit = NULL, exit_t = NULL, net = NULL WHERE id = ?").bind(sg.id).run(); // not decided yet: it was closed too early
+  }
+  return { found: found.length, opened, open: open.length, closed, rechecked: fixed };
+}
+// Kalshi's confirmed result for one market: 'yes', 'no', or null while it is undecided or unreachable.
+async function kalshiResult(ticker) {
+  const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets/' + encodeURIComponent(ticker), { headers: { Accept: 'application/json' } }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+  const res = r && r.market ? String(r.market.result || '').toLowerCase() : ''; return res === 'yes' || res === 'no' ? res : null;
+}
+// Polymarket prices by market, keyed by outcome name. Returns null when Polymarket cannot be reached, so nothing is marked on a guess.
+async function pmPrices(conds) {
+  const out = new Map(); let ok = false;
+  for (const tail of ['', '&closed=true']) {
+    const need = conds.filter((c) => !out.has(c)).slice(0, 40); if (!need.length) break;
+    const r = await fetch('https://gamma-api.polymarket.com/markets?limit=100' + need.map((c) => '&condition_ids=' + encodeURIComponent(c)).join('') + tail, { headers: { Accept: 'application/json' } }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!Array.isArray(r)) continue; ok = true;
+    for (const m of r) { try { const o = JSON.parse(m.outcomes); const p = JSON.parse(m.outcomePrices); const map = {}; o.forEach((name, i) => { map[String(name).toLowerCase()] = Number(p[i]); }); out.set(m.conditionId, map); } catch (e) { /* skip a malformed market */ } }
+  }
+  return ok ? out : null;
 }
 
 async function tick(env) {
