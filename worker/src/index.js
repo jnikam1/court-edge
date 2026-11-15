@@ -31,6 +31,7 @@ async function ensure(env) {
   try { await env.DB.prepare('ALTER TABLE inj ADD COLUMN big INTEGER DEFAULT 0').run(); } catch (e) { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE subs ADD COLUMN tested INTEGER').run(); } catch (e) { /* already there */ }
   try { await env.DB.prepare('ALTER TABLE signals ADD COLUMN verified INTEGER').run(); } catch (e) { /* already there */ }
+  try { await env.DB.prepare('ALTER TABLE sent ADD COLUMN amt REAL').run(); } catch (e) { /* already there */ }
   ready = true;
 }
 
@@ -250,15 +251,21 @@ async function tick(env) {
   let fresh = 0; const newAdds = []; const news = [];
   if (al && al.alerts) {
     for (const a of al.alerts) {
-      const seen = await env.DB.prepare('SELECT last FROM sent WHERE id = ?').bind(a.id).first();
+      const seen = await env.DB.prepare('SELECT last, amt FROM sent WHERE id = ?').bind(a.id).first();
       if (seen && seen.last >= a.last) continue;
+      // A wallet that keeps topping up the same position is one story, not ten. Say it again only when the position
+      // has grown by a quarter, and by at least $25k, since the last time it was sent.
+      const size = Math.round(a.sell ? a.sold || 0 : a.stake || a.added || 0); const before = seen ? seen.amt : null;
+      if (seen && (before === null || before === undefined || size - before < Math.max(25000, 0.25 * before))) {
+        stmts.push(env.DB.prepare('UPDATE sent SET last = ?, t = ?, amt = COALESCE(amt, ?) WHERE id = ?').bind(a.last, now, size, a.id)); continue;
+      }
       if (a.sell) { // a strong wallet getting out: sent to the phone, never tracked as an add
-        stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
+        stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t, amt) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t, amt = excluded.amt').bind(a.id, a.last, now, size));
         if (!first) notes.push({ id: 'ws-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.kind === 'switch' ? ' switched from ' + a.outcome + ' to ' + a.to : a.kind === 'exit' ? ' sold out of ' + a.outcome : ' sold ' + kUsd(a.sold) + ' of ' + a.outcome), body: a.title + ' (' + a.cat + '). Sold ' + kUsd(a.sold) + (a.price ? ' at ' + cents(a.price) : '') + (a.kind === 'switch' ? ', bought ' + kUsd(a.bought) + ' of ' + a.to : a.left ? ', still holds ' + kUsd(a.left) : ', nothing left') + '.' });
         continue;
       }
       fresh++; newAdds.push(a);
-      stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t').bind(a.id, a.last, now));
+      stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t, amt) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t, amt = excluded.amt').bind(a.id, a.last, now, size));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
       if (a.lean === 'against' || a.quiet) continue; // a hedge or a trim: logged, but not sent as a bet
       if (a.grouped) { notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + ' added ' + kUsd(a.added) + ' on ' + a.outcome + (a.lean === 'hedged' ? ' (works both sides)' : ''), body: a.title + ' (' + a.cat + '). Whole position: paid ' + kUsd(a.net.for) + ' if ' + a.outcome + ' win, ' + kUsd(a.net.against) + ' if ' + a.other + ' win.' }); continue; }

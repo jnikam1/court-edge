@@ -290,6 +290,27 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     } finally { global.fetch = realFetch; Date.now = realNow; }
   });
 
+  await check('logger: a whale topping up the same position is announced once, then again only when it has grown a lot', async () => {
+    let sqlite; try { sqlite = require('node:sqlite'); } catch (e) { return; }
+    const db = new sqlite.DatabaseSync(':memory:');
+    const st = (sql, args) => ({ bind: (...a) => st(sql, a), first: async () => db.prepare(sql).get(...args) || null, all: async () => ({ results: db.prepare(sql).all(...args) }), run: async () => db.prepare(sql).run(...args), go: () => db.prepare(sql).run(...args) });
+    const env = { APP_URL: 'https://app.test', DB: { prepare: (sql) => st(sql, []), batch: async (list) => list.map((x) => x.go()) } };
+    const worker = (await import(path.join(root, 'worker/src/index.js') + '?repeat')).default;
+    let feed = {}; const realFetch = global.fetch; const realNow = Date.now; let clock = 1794900000000;
+    global.fetch = async (u) => { u = String(u); if (u.indexOf('gamma-api') >= 0) return { ok: true, status: 200, json: async () => [] }; const k = Object.keys(feed).find((x) => u.indexOf(x) >= 0); return { ok: true, status: 200, json: async () => (k ? feed[k] : {}) }; };
+    Date.now = () => clock;
+    const run = async (alerts) => { feed = { '/api/sports': { games: [], inj: [], teams: [], feeds: {} }, '/api/alerts': { alerts }, '/api/scan': { matches: [] } }; let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; clock += 60000; };
+    const A = (stake, last) => ({ id: '0xbtb|nfl-min-gb', grouped: true, whale: 'BreakTheBank', w: '0xbtb', cat: 'NFL', title: 'Vikings vs. Packers', cond: '0xc1', outcome: 'Vikings', other: 'Packers', added: stake, paid: 0.43, stake, cur: 0.43, last, lean: 'for', net: { for: stake * 2, against: 0 } });
+    const sentNotes = () => JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'notes'").get().v).filter((n) => n.kind === 'whale').length;
+    try {
+      await run([]); await run([A(112000, 100)]); assert.strictEqual(sentNotes(), 1, 'the first buy is announced');
+      for (let i = 1; i <= 10; i++) await run([A(112000 + i * 2000, 100 + i)]);   // ten small top-ups, each with a newer timestamp
+      assert.strictEqual(sentNotes(), 1, 'ten top-ups of $2k each: nothing more is sent'); assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM signals WHERE setup = 'whale_add'").get().n, 1, 'and they are one tracked add, not eleven');
+      await run([A(175000, 200)]); assert.strictEqual(sentNotes(), 2, 'up by more than a quarter and $25k: announced again');
+      await run([A(180000, 201)]); assert.strictEqual(sentNotes(), 2);
+    } finally { global.fetch = realFetch; Date.now = realNow; }
+  });
+
   // the logger, with its database and the push services faked
   await check('logger: tests and price alerts reach one signed-up phone only, and sign-ups must be real push addresses', async () => {
     const mod = await import(path.join(root, 'worker/src/index.js')); const worker = mod.default;
