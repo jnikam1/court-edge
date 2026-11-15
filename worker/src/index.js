@@ -387,11 +387,15 @@ export default {
         try { const r = await fetch(KALSHI + '/markets?limit=1&status=open&series_ticker=KXNBAGAME', { headers: { Accept: 'application/json' } }); const d = r.ok ? await r.json() : null; const m = d && d.markets && d.markets[0]; return json({ kalshi: r.status, sample: m ? { ticker: m.ticker, bid: m.yes_bid_dollars, ask: m.yes_ask_dollars, status: m.status } : null }); }
         catch (e) { return json({ kalshi: 0, error: String(e && e.message) }); }
       }
-      if (url.pathname === '/signals') { // the engine's scoreboard and its latest paper trades
+      if (url.pathname === '/signals' || url.pathname === '/brief') { // the engine's scoreboard and its latest paper trades
         // Whale adds recorded before each one was pinned to its own market (no saved market id) could be valued on the wrong side, so they are left out of every record.
         const rows = (((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || []).filter((r) => !(r.setup === 'whale_add' && !r.ctx));
         const last = await kvGet(env, 'last'); const ln = last ? JSON.parse(last) : null;
-        if (url.searchParams.get('brief')) return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
+        if (url.searchParams.get('brief') || url.pathname === '/brief') {
+          const nowS = Math.floor(Date.now() / 1000); const openBy = {}; for (const r of rows) if (r.status === 'open') { const o = openBy[r.setup] = openBy[r.setup] || { n: 0, oldestMin: 0, sample: null }; o.n++; const age = Math.round((nowS - r.t) / 60); if (age >= o.oldestMin) { o.oldestMin = age; o.sample = (r.name || '') + ' | ' + (r.title || '').slice(0, 40) + ' | last ' + r.last; } }
+          return json({ now: nowS, ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), open: openBy, ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
+        }
+        if (false) return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
         return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), ufc: favStats(rows), signals: rows.filter((r) => !QUIET[r.setup]).slice(0, 40), tracked: rows.filter((r) => QUIET[r.setup]).slice(0, 40) });
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
