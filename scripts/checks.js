@@ -142,6 +142,16 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     const grades = B.whaleGrades([{ setup: 'whale_add', lg: 'NBA', name: 'w1', status: 'deadline', net: 6 }, { setup: 'whale_add', lg: 'NBA', name: 'w2', status: 'deadline', net: -2 }]);
     assert.strictEqual(grades[0].whale, 'w1'); assert.ok(grades[0].grade < 6 && grades[0].grade > 2, 'one good add is pulled toward the category average');
   });
+  await check('UFC: a Kalshi fight picks up its round, records and weight class from ESPN, and is never called live without it', () => {
+    const { withEspn } = require('../lib/ufc'); const G = () => ({ state: 'upcoming', a: { name: 'Ciryl Gane', record: null }, b: { name: 'Josh Hokit', record: null } });
+    const bout = (state, round, clock) => ({ card: 'UFC 334: Gane vs. Hokit', f: [{ name: 'Josh Hokit', record: '10-0-0' }, { name: 'Ciryl Gane', record: '14-2-0' }], state, round, clock, weight: 'Heavyweight', rounds: 5 });
+    let g = G(); assert.strictEqual(withEspn(g, [bout('pre', 0, null)]), true); assert.strictEqual(g.state, 'upcoming'); assert.strictEqual(g.a.record, '14-2-0'); assert.strictEqual(g.b.record, '10-0-0'); assert.strictEqual(g.weight, 'Heavyweight');
+    g = G(); withEspn(g, [bout('in', 2, '3:15')]); assert.strictEqual(g.state, 'live'); assert.strictEqual(g.text, 'Round 2 of 5 · 3:15');
+    g = G(); withEspn(g, [bout('post', 3, null)]); assert.strictEqual(g.state, 'closing');
+    g = G(); g.state = 'closing'; withEspn(g, [bout('in', 1, '5:00')]); assert.strictEqual(g.state, 'closing', 'a decided price is not reopened by a late feed');
+    g = G(); assert.strictEqual(withEspn(g, [{ f: [{ name: 'Someone Else' }, { name: 'Another Fighter' }], state: 'in' }]), false); assert.strictEqual(g.state, 'upcoming');
+    g = { state: 'upcoming', a: { name: 'Waldo Cortes-Acosta' }, b: { name: 'Jim Miller' } }; assert.strictEqual(withEspn(g, [{ f: [{ name: 'Waldo Cortes Acosta', record: '1-0-0' }, { name: 'Jim Miller', record: '2-0-0' }], state: 'pre' }]), true, 'names that differ only in punctuation still match');
+  });
   await check('engine: UFC favourites are bought once at the scheduled start, and the record and two-favourite roll add up', async () => {
     const B = await import(path.join(root, 'worker/src/brain.js')); const now = 2000000;
     const g = { lg: 'ufc', event: 'KXUFCFIGHT-26NOV14GANHOK', card: '26NOV14', state: 'upcoming', start: now + 9000, an: 'Ciryl Gane', bn: 'Josh Hokit', at: 'T-GAN', bt: 'T-HOK', ab: 0.66, aa: 0.67, bb: 0.33, ba: 0.34 };

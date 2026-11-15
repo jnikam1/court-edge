@@ -360,7 +360,7 @@
       if (loading.length === wanted.length) return 'Loading…';
       if (D.q) return 'Nothing ' + (kind === 'listed' ? '' : kind + ' ') + 'matches "' + D.q + '". Check the spelling, or clear the search.';
       if (failed.length === wanted.length) return 'Could not load ' + what + '. Trying again every 15 seconds.';
-      if (kind === 'live') return D.sport === 'ufc' ? 'The app has no live round feed for fights yet, so it cannot show which bout is under way. The card is listed below in order.' : 'No ' + what + ' in play right now.';
+      if (kind === 'live') return D.sport === 'ufc' ? (D.src.ufc && D.src.ufc.rounds ? 'No fight in the cage right now.' : 'The live round feed is not answering, so the app cannot show which bout is under way. The card is listed below in order.') : 'No ' + what + ' in play right now.';
       return 'No ' + what + (kind === 'listed' ? ' are listed' : ' ' + kind) + ' on Kalshi right now.' + (D.sport === 'nba' || D.sport === 'nfl' ? ' Games appear here as soon as Kalshi lists them.' : D.sport === 'ufc' ? ' Fights appear here when Kalshi lists the next card.' : '');
     };
     var gaps = rows.filter(function (r) { return r.gap; }); $('secGaps').hidden = !gaps.length || D.when === 'up' && !gaps.some(function (r) { return !r.live; });
