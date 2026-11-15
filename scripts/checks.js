@@ -161,6 +161,18 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     g = G(); assert.strictEqual(withEspn(g, [{ f: [{ name: 'Someone Else' }, { name: 'Another Fighter' }], state: 'in' }]), false); assert.strictEqual(g.state, 'upcoming');
     g = { state: 'upcoming', a: { name: 'Waldo Cortes-Acosta' }, b: { name: 'Jim Miller' } }; assert.strictEqual(withEspn(g, [{ f: [{ name: 'Waldo Cortes Acosta', record: '1-0-0' }, { name: 'Jim Miller', record: '2-0-0' }], state: 'pre' }]), true, 'names that differ only in punctuation still match');
   });
+  await check('UFC: money flow counts each trade on the fighter the buyer backed, and says when one page does not reach an hour', async () => {
+    const { flow } = require('../lib/ufc'); const realFetch = global.fetch; const iso = (secsAgo) => new Date(Date.now() - secsAgo * 1000).toISOString();
+    const T = (taker, n, yes, secsAgo) => ({ count_fp: String(n), taker_side: taker, yes_price_dollars: String(yes), no_price_dollars: String(Math.round((1 - yes) * 100) / 100), created_time: iso(secsAgo) });
+    let tape = { 'F1-AAA': [T('yes', 100, 0.67, 60), T('no', 50, 0.67, 120), T('yes', 1000, 0.60, 1800)], 'F1-BBB': [T('yes', 10, 0.34, 30)] };
+    global.fetch = async (u) => { const t = /ticker=([^&]+)/.exec(String(u)); return { ok: true, status: 200, json: async () => ({ trades: tape[t ? decodeURIComponent(t[1]) : ''] || [] }) }; };
+    try {
+      const f = await flow({ a: { ticker: 'F1-AAA' }, b: { ticker: 'F1-BBB' } });
+      assert.deepStrictEqual(f.m10, { a: 67, b: 20, n: 3 }, 'Yes on A is A; No on A and Yes on B are B'); assert.deepStrictEqual(f.m60, { a: 667, b: 20, n: 4 }); assert.strictEqual(f.big[0].usd, 600); assert.strictEqual(f.since, null);
+      tape = { 'F2-AAA': Array.from({ length: 1000 }, (x, i) => T('yes', 1, 0.5, i)), 'F2-BBB': [] };
+      const busy = await flow({ a: { ticker: 'F2-AAA' }, b: { ticker: 'F2-BBB' } }); assert.strictEqual(busy.m60, null, 'a full page that only reaches back 17 minutes cannot speak for the hour'); assert.ok(busy.m10.n >= 599 && busy.m10.n <= 602); assert.ok(busy.since >= 998 && busy.since <= 1001); assert.strictEqual(busy.all.a, 500);
+    } finally { global.fetch = realFetch; }
+  });
   await check('engine: UFC favourites are bought once at the scheduled start, and the record and two-favourite roll add up', async () => {
     const B = await import(path.join(root, 'worker/src/brain.js')); const now = 2000000;
     const g = { lg: 'ufc', event: 'KXUFCFIGHT-26NOV14GANHOK', card: '26NOV14', state: 'upcoming', start: now + 9000, an: 'Ciryl Gane', bn: 'Josh Hokit', at: 'T-GAN', bt: 'T-HOK', ab: 0.66, aa: 0.67, bb: 0.33, ba: 0.34 };

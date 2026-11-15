@@ -272,3 +272,8 @@ details.fold:not([open]) > summary { padding-bottom: 0; border-bottom: 1px solid
 details.adv > summary { font-size: 13px; color: var(--muted); cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 details.adv[open] > summary { margin-bottom: 4px; }
 @media (min-width: 960px) { .page-h a.ext { display: none; } }
+
+/* money flow on a fight */
+.flow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.flow .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: block; }
+.flow .bar .fa { display: block; height: 100%; background: var(--accent); }
