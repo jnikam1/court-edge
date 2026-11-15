@@ -120,7 +120,7 @@ const nul = (x) => (x === undefined || x === null || Number.isNaN(x) ? null : x)
 const HOT = ['Out', 'Doubtful', 'Questionable']; // statuses worth a phone alert
 const getJson = async (url) => { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (!r.ok) throw new Error(url.split('/api/')[1] + ' ' + r.status); return r.json(); };
 
-const QUIET = { whale_add: 1, injury_news: 1, ufc_fav: 1, ufc_flow: 1, ufc_flow_hold: 1 }; // record keeping, not trade ideas
+const QUIET = { whale_add: 1, injury_news: 1, ufc_fav: 1, ufc_flow: 1, ufc_flow_hold: 1, nfl_flow: 1, nfl_flow_hold: 1 }; // record keeping, not trade ideas
 const COLS = ['id', 't', 'setup', 'lg', 'event', 'side', 'name', 'ticker', 'title', 'url', 'entry', 'target', 'deadline', 'model', 'why', 'ctx', 'status'];
 async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   const found = []; const games = (sp && sp.games) || []; const byEvent = new Map(games.map((g) => [g.event, g]));
@@ -136,7 +136,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
   for (const m of matches) found.push(...tennisSignals(m, now));
   // UFC: when a bout that was listed a few minutes ago is gone or decided, the next one on that card is up. Buy its favourite on paper, once.
   const ufc = games.filter((g) => g.lg === 'ufc');
-  for (const g of ufc) found.push(...flowSignals(g, now)); // the money test
+  for (const g of games) if (g.lg === 'ufc' || g.lg === 'nfl') found.push(...flowSignals(g, now)); // the money test
   if (ufc.length) {
     const before = (((await env.DB.prepare("SELECT DISTINCT event FROM gsnaps WHERE lg = 'ufc' AND state != 'closing' AND t >= ? AND t < ?").bind(now - 900, now).all()).results) || []).map((r) => r.event);
     const still = new Set(ufc.filter((g) => g.state !== 'closing').map((g) => g.event)); const cardOf = (ev) => (String(ev).split('-').pop().match(/^\d{2}[A-Z]{3}\d{2}/) || [''])[0];
@@ -391,6 +391,7 @@ export default {
         // Whale adds recorded before each one was pinned to its own market (no saved market id) could be valued on the wrong side, so they are left out of every record.
         const rows = (((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || []).filter((r) => !(r.setup === 'whale_add' && !r.ctx));
         const last = await kvGet(env, 'last'); const ln = last ? JSON.parse(last) : null;
+        if (url.searchParams.get('brief')) return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
         return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), ufc: favStats(rows), signals: rows.filter((r) => !QUIET[r.setup]).slice(0, 40), tracked: rows.filter((r) => QUIET[r.setup]).slice(0, 40) });
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }

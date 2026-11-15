@@ -462,14 +462,14 @@
     box.appendChild(el('div', 'small', d.state === 'live' ? 'The score model treats the score gap as a random walk around the pre-game price. It knows the score and the clock, not who has the ball or who is on the floor.' : 'When these agree there is nothing to do. When Kalshi is the odd one out, look for the reason before assuming it is wrong.'));
   }
   // A fight reuses the game page's panels under its own headings, and hides the ones it has nothing for.
-  var FOLD = { gdInj: ['Injuries that matter', 'Where the money is'], gdLines: ['Spread and total', 'Method, rounds and distance'], gdWal: ['Polymarket wallets', 'Who holds each side on Polymarket'] };
+  var FOLD = { gdLines: ['Spread and total', 'Method, rounds and distance'], gdWal: ['Polymarket wallets', 'Who holds each side on Polymarket'] };
   function gameFolds(ufc) {
     Object.keys(FOLD).forEach(function (id) { var f = $(id).closest('details'); if (f) f.querySelector('summary').textContent = FOLD[id][ufc ? 1 : 0]; });
-    ['gdFair', 'gdStr', 'gdForm'].forEach(function (id) { var f = $(id).closest('details'); if (f) f.style.display = ufc ? 'none' : ''; });
+    ['gdInj', 'gdFair', 'gdStr', 'gdForm'].forEach(function (id) { var f = $(id).closest('details'); if (f) f.style.display = ufc ? 'none' : ''; });
   }
   function fightMoney(d) { // Kalshi's own trade tape, split by which fighter the buyer backed
-    var box = $('gdInj'); box.replaceChildren(); var F = d.flow; var A = last(d.a.name), B = last(d.b.name);
-    if (!F) { box.appendChild(el('div', 'small', 'No trades to show for this fight right now.')); return; }
+    var box = $('gdMoney'); box.replaceChildren(); var F = d.flow; var A = last(d.a.name), B = last(d.b.name);
+    if (!F) { box.appendChild(el('div', 'small', 'No trades to show right now.')); return; }
     var line = function (label, x) {
       if (!x) return; var tot = x.a + x.b; var w = el('div', 'flow');
       add(w, el('div', 'small', label + ' · ' + x.n + ' trades'));
@@ -484,7 +484,7 @@
       box.appendChild(el('div', 'sub', F.since ? 'Largest trades in the last ' + Math.max(1, Math.round(F.since / 60)) + ' minutes' : 'Largest trades in the last hour')); var kv2 = el('div', 'kv'); kv2.style.gridTemplateColumns = '1fr auto auto';
       F.big.forEach(function (t) { add(kv2, el('span', 'k', (t.side === 'a' ? A : B) + ' at ' + cents(t.price)), el('span', 'num', usd(t.usd)), el('span', 'small', ago(t.t))); }); box.appendChild(kv2);
     }
-    box.appendChild(el('div', 'small', 'Kalshi trades, counted on the side of whoever crossed the spread to buy. Money follows the price as often as it leads it: a fighter landing a big shot pulls in buyers after the price has already jumped.'));
+    box.appendChild(el('div', 'small', 'Kalshi trades, counted on the side of whoever crossed the spread to buy. Money follows the price as often as it leads it: after a big play or a big shot, buyers arrive once the price has already jumped.'));
   }
   function fightProps(d) { // other Kalshi markets on the same bout
     var box = $('gdLines'); box.replaceChildren(); var P = d.props || [];
@@ -563,8 +563,8 @@
   }
   function renderGame(d) {
     cur.d = d; gHead(d); read(d); calc(d); chart(d);
-    gameFolds(d.league === 'ufc');
-    if (d.league === 'ufc') { ['gdFair', 'gdStr', 'gdForm'].forEach(function (id) { $(id).replaceChildren(); }); fightMoney(d); fightProps(d); }
+    gameFolds(d.league === 'ufc'); fightMoney(d);
+    if (d.league === 'ufc') { ['gdInj', 'gdFair', 'gdStr', 'gdForm'].forEach(function (id) { $(id).replaceChildren(); }); fightProps(d); }
     else { gInj(d); gFair(d); gLines(d); gStrength(d); gForm(d); }
     var cond = d.pm ? d.pm.cond : null; if (cur.pmCond !== cond) { cur.pmCond = cond; loadGameWallets(); }
     var s = $('dStatus'); s.replaceChildren(); add(s, document.createTextNode('Updated '), el('b', '', new Date(d.asOf).toLocaleTimeString()), document.createTextNode(' · refreshes every 10s'));
