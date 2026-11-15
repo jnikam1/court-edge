@@ -481,7 +481,7 @@
     line('Last 10 minutes', F.m10); line('Last 60 minutes', F.m60);
     if (F.all) line('Last ' + Math.max(1, Math.round(F.since / 60)) + ' minutes (as far back as one page of trades goes)', F.all);
     if (F.big && F.big.length) {
-      box.appendChild(el('div', 'sub', 'Largest trades in the last hour')); var kv2 = el('div', 'kv'); kv2.style.gridTemplateColumns = '1fr auto auto';
+      box.appendChild(el('div', 'sub', F.since ? 'Largest trades in the last ' + Math.max(1, Math.round(F.since / 60)) + ' minutes' : 'Largest trades in the last hour')); var kv2 = el('div', 'kv'); kv2.style.gridTemplateColumns = '1fr auto auto';
       F.big.forEach(function (t) { add(kv2, el('span', 'k', (t.side === 'a' ? A : B) + ' at ' + cents(t.price)), el('span', 'num', usd(t.usd)), el('span', 'small', ago(t.t))); }); box.appendChild(kv2);
     }
     box.appendChild(el('div', 'small', 'Kalshi trades, counted on the side of whoever crossed the spread to buy. Money follows the price as often as it leads it: a fighter landing a big shot pulls in buyers after the price has already jumped.'));
