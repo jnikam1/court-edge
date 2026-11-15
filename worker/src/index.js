@@ -387,7 +387,8 @@ export default {
         catch (e) { return json({ kalshi: 0, error: String(e && e.message) }); }
       }
       if (url.pathname === '/signals') { // the engine's scoreboard and its latest paper trades
-        const rows = ((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || [];
+        // Whale adds recorded before each one was pinned to its own market (no saved market id) could be valued on the wrong side, so they are left out of every record.
+        const rows = (((await env.DB.prepare('SELECT * FROM signals ORDER BY t DESC LIMIT 2000').all()).results) || []).filter((r) => !(r.setup === 'whale_add' && !r.ctx));
         const last = await kvGet(env, 'last'); const ln = last ? JSON.parse(last) : null;
         return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), ufc: favStats(rows), signals: rows.filter((r) => !QUIET[r.setup]).slice(0, 40), tracked: rows.filter((r) => QUIET[r.setup]).slice(0, 40) });
       }
