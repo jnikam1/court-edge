@@ -142,6 +142,13 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     const rec = B.gameSignals(nba, null, 0.70, now).filter((x) => x.setup === 'nba_recovery'); assert.strictEqual(rec.length, 1); assert.strictEqual(rec[0].side, 'a'); assert.strictEqual(rec[0].target, 0.42);
     assert.strictEqual(B.gameSignals(Object.assign({}, nba, { aa: 0.36 }), null, 0.70, now).filter((x) => x.setup === 'nba_recovery').length, 0, 'price at or above the model: no trade');
     assert.strictEqual(B.gameSignals(Object.assign({}, nba, { period: 4, clock: 300 }), null, 0.70, now).filter((x) => x.setup === 'nba_recovery').length, 0, 'too little game left');
+    // the pre-game underdog that is level around halftime: bought once, held to the result
+    const hd = { lg: 'nba', event: 'H', state: 'live', a: 'ORL', b: 'BOS', an: 'Magic', bn: 'Celtics', ab: 0.44, aa: 0.45, bb: 0.55, ba: 0.56, sa: 58, sb: 57, period: 3, clock: 600 };
+    const h1 = B.gameSignals(hd, null, 0.35, now).filter((x) => x.setup === 'half_dog'); assert.strictEqual(h1.length, 1); assert.strictEqual(h1[0].name, 'Magic'); assert.strictEqual(h1[0].entry, 0.45); assert.strictEqual(h1[0].target, null); assert.strictEqual(h1[0].deadline, null);
+    assert.strictEqual(B.gameSignals(hd, null, 0.46, now).filter((x) => x.setup === 'half_dog').length, 0, 'not an underdog before the game');
+    assert.strictEqual(B.gameSignals(Object.assign({}, hd, { period: 2, clock: 600 }), null, 0.35, now).filter((x) => x.setup === 'half_dog').length, 0, 'too early');
+    assert.strictEqual(B.gameSignals(Object.assign({}, hd, { period: 4, clock: 600 }), null, 0.35, now).filter((x) => x.setup === 'half_dog').length, 0, 'too late');
+    assert.strictEqual(B.gameSignals(Object.assign({}, hd, { ab: 0.57, aa: 0.58, bb: 0.42, ba: 0.43 }), null, 0.35, now).filter((x) => x.setup === 'half_dog').length, 0, 'already past 50¢');
     const sig = { setup: 'nba_recovery', t: now, entry: 0.44, target: 0.56, deadline: now + 2400, ctx: { maxBehind: 20 } };
     assert.deepStrictEqual(B.manage(sig, { bid: 0.5, ask: 0.51, behind: 8 }, now + 60), { last: 0.5, hi: 0.5, lo: 0.5 });
     const hit = B.manage(sig, { bid: 0.57, ask: 0.58, behind: 2 }, now + 600); assert.strictEqual(hit.status, 'target'); assert.strictEqual(hit.exit, 0.56); assert.strictEqual(hit.net, 9.8); // 12¢ less 1.7¢ to get in and 0.4¢ to get out

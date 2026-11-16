@@ -5,6 +5,7 @@
 export const SETUPS = {
   nfl_dog_lead: { label: 'NFL underdog takes the lead', push: true, basis: 'Past games: 137 like this, 84% reached 80¢ before the end.' },
   nba_recovery: { label: 'NBA favourite behind, priced under the score model', push: true, basis: 'New setup with no record yet. A plain "buy the favourite when it dips" lost in past games, so this one also needs the model to disagree with the price.' },
+  half_dog: { label: 'Pre-game underdog level around halftime, held to the result', push: false, basis: 'From 2,194 past games: an NBA underdog priced 40 to 50¢ at halftime won 55% of 96 (+9¢ a contract), NFL 50% of 32. The edge was smaller in the more recent games, so this runs on paper until it has its own record.' },
   score_follow: { label: 'Price lagging a score change', push: false, basis: 'New setup with no record yet. Checked once a minute, so most lags are gone before it sees them.' },
   tennis_reprice: { label: 'Tennis price under the live model after a set', push: true, basis: 'New setup with no record yet.' },
   injury_news: { label: 'Late injury news', push: false, basis: 'Measures how far the price moves after the report changes.' },
@@ -79,6 +80,13 @@ export function gameSignals(g, prev, preA, now) {
       out.push(base('nba_recovery', fav, { id: 'nba_recovery|' + g.event, target: Math.min(0.95, r2(s.ask + 0.12)), deadline: now + 40 * 60, ctx: { maxBehind: 20 },
         why: s.name + ' were ' + cents(pfav) + ' before the game, trail by ' + behind + ' (' + score + ') and cost ' + cents(s.ask) + '. Score model says ' + Math.round(s.model * 100) + '%. Plan: sell 12¢ higher, out if the gap reaches 20 points or after 40 minutes.' }));
     }
+  }
+  // 2b) Either league, halftime to 60% through: the side priced 41¢ or less before the game now costs 40 to 50¢.
+  //     The market tends to keep pricing the pre-game favourite as the better team after the game has said otherwise.
+  if (f !== null && f >= 0.4 && f <= 0.5 && 1 - pfav <= 0.41) {
+    const s = S(dog);
+    if (s.ask !== null && s.ask >= 0.4 && s.ask < 0.5) out.push(base('half_dog', dog, { id: 'half_dog|' + g.event, target: null, deadline: null,
+      why: s.name + ' were ' + cents(1 - pfav) + ' before the game and cost ' + cents(s.ask) + ' around halftime (' + score + '). Held to the result.' }));
   }
   // 3) Either league: the score changed since last minute and the price moved less than half of what the model did.
   if (prev && num(prev.a_score) !== null && num(prev.b_score) !== null && now - prev.t <= 150 && (prev.a_score !== g.sa || prev.b_score !== g.sb)) {
