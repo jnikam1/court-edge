@@ -1366,7 +1366,38 @@
   // phones only allow sound after a tap, so unlock it on the first tap anywhere
   document.addEventListener('click', function () { if (al.sound && !al.ctx) { try { al.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }, true);
   function alertBet(a) { return { who: 0, w: a.w, cond: a.cond, title: a.title, outcome: a.outcome || 'this side', usd: a.stake, avg: a.avg, cur: a.cur, slug: a.slug }; }
+  // What the research on these wallets changed: a card now says when the wallet looks like a market maker (its fills are
+  // other people's bets, not its own view), what else it holds on the same game, how its price compares with the
+  // sportsbook line and Kalshi, and what happened to the price after its adds since we began tracking it.
   function alertCard(a) {
+    var c = alertCard0(a); var foot = c.querySelector('.foot'); var sub = c.querySelector('.sub'); var mk = a.maker && a.maker.is ? a.maker : null;
+    var before = function (node) { if (foot) c.insertBefore(node, foot); else c.appendChild(node); };
+    if (mk) {
+      var f = el('div', 'flag'); var why = mk.why.join('; ') + '.';
+      add(f, icon('alert'), el('span', '', mk.kind === 'losing' ? 'Not one to follow: ' + why + ' Not sent to your phone.'
+        : mk.kind === 'thin' ? 'Thin edge: ' + why + ' That is a market maker or a bettor near break-even, and a buy from either says little. Not sent to your phone.'
+        : 'Looks like a market maker: ' + why + ' What it holds is mostly what other people traded against it, not a view on who wins. Not sent to your phone.'));
+      if (sub && sub.nextSibling) c.insertBefore(f, sub.nextSibling); else before(f);
+      var good = foot && foot.querySelector('.chip.good'); if (good) good.className = 'chip';
+      if (foot) foot.insertBefore(el('span', 'chip', mk.kind === 'losing' ? 'Losing wallet' : mk.kind === 'thin' ? 'Thin edge' : 'Market maker'), foot.firstChild);
+    }
+    var also = a.net && a.net.also; if (also && also.length) before(el('div', 'small', 'Same game, other markets: ' + also.map(function (x) { return usd(x.usd) + ' of ' + x.outcome + ' on "' + x.title + '"'; }).join(', ') + '. Read the whole book, not one leg.'));
+    var r = a.ref; if (r && (has(r.fair) || has(r.kalshi))) {
+      var bits = [];
+      if (has(r.fair)) { bits.push((r.book || 'Sportsbook') + ' line with the margin taken out: ' + cents(r.fair)); if (has(a.paid)) { var gap = Math.round((a.paid - r.fair) * 100); bits.push('it paid ' + cents(a.paid) + (gap ? ', ' + Math.abs(gap) + '¢ ' + (gap > 0 ? 'worse' : 'better') + ' than that line' : ', right on that line')); } }
+      if (has(r.kalshi)) bits.push('Kalshi asks ' + cents(r.kalshi) + ' for ' + last(a.outcome) + ' now');
+      before(el('div', 'small', bits.join('; ').replace(/^./, function (ch) { return ch.toUpperCase(); }) + '.'));
+    }
+    var g = al.grades && al.grades[a.whale + '|' + a.cat];
+    if (g && g.n) before(el('div', 'small', 'Tracked here: ' + g.n + (g.n === 1 ? ' add' : ' adds') + ' in ' + a.cat + (has(g.effN) && g.effN < g.n - 0.5 ? ' (about ' + g.effN + ' by size)' : '') + '. Price ' + (has(g.m15) ? signedC(g.m15) + ' after 15 minutes, ' : '') + signedC(g.avg) + ' a contract after an hour and fees.' + (g.n < 10 ? ' Too few to lean on.' : '')));
+    return c;
+  }
+  function signedC(x) { return (x >= 0 ? '+' : '') + x + '¢'; }
+  function loadGrades() {
+    if (!pu.url || (al.gAt && Date.now() - al.gAt < 300000)) return; al.gAt = Date.now();
+    lg('/brief').then(function (d) { var m = {}; (d.whales || []).forEach(function (w) { m[w.whale + '|' + w.cat] = w; }); al.grades = m; if (al.data && location.hash === '#alerts') renderAlerts(); }).catch(function () {});
+  }
+  function alertCard0(a) {
     var c = el('button', 'bet'); c.type = 'button';
     var who = el('div', 'who'); add(who, el('b', '', a.whale), el('span', '', ago(a.last)));
     if (a.sell) { // a strong wallet getting out, cutting back, or changing sides
@@ -1416,7 +1447,8 @@
       d.alerts.forEach(function (a) { if (!al.seen[a.id] || a.last > al.seen[a.id]) { if (!al.first) { fresh.push(a); al.fresh[a.id] = 1; } al.seen[a.id] = a.last; } });
       var keep = {}; d.alerts.forEach(function (a) { keep[a.id] = al.seen[a.id]; }); al.seen = keep; al.first = false;
       try { localStorage.setItem('ce-alerts-seen', JSON.stringify(al.seen)); } catch (e) {}
-      renderAlerts(); badge();
+      renderAlerts(); badge(); loadGrades();
+      fresh = fresh.filter(function (x) { return !(x.maker && x.maker.is); }); // market makers stay on the page but make no noise
       if (fresh.length) {
         var a = fresh[0];
         say(a.whale + ' ' + (a.fresh ? 'opened ' : 'added ') + usd(a.added) + ' on ' + (a.outcome || 'one side'), a.title + ' (' + a.cat + ')' + (fresh.length > 1 ? ', and ' + (fresh.length - 1) + ' more' : '') + '. Tap to see.', '#alerts');

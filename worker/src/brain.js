@@ -216,6 +216,28 @@ export function whaleGrades(rows) {
   const cat = {}; for (const r of closed) { const c = cat[r.lg] = cat[r.lg] || { n: 0, sum: 0 }; c.n++; c.sum += r.net; }
   const by = {}; for (const r of closed) { const k = r.name + '|' + r.lg; const w = by[k] = by[k] || { whale: r.name, cat: r.lg, n: 0, sum: 0 }; w.n++; w.sum += r.net; }
   const K = 10; // an add counts fully only after about ten of them
-  return Object.values(by).map((w) => { const base = cat[w.cat].sum / cat[w.cat].n; return { whale: w.whale, cat: w.cat, n: w.n, avg: Math.round(w.sum / w.n * 10) / 10, grade: Math.round((w.sum + K * base) / (w.n + K) * 10) / 10 }; })
+  const r1 = (x) => Math.round(x * 10) / 10; const ctxOf = (r) => { try { return r.ctx ? (typeof r.ctx === 'string' ? JSON.parse(r.ctx) : r.ctx) : {}; } catch (e) { return {}; } };
+  // Markouts: where the price stood 5 and 15 minutes after the add, against the price when we saw it. Before fees.
+  // Effective count: one $2M bet beside nine $20k bets is closer to one bet than ten, so (sum of stakes) squared over (sum of squared stakes).
+  for (const r of closed) {
+    const w = by[r.name + '|' + r.lg]; const c = ctxOf(r);
+    for (const k of ['m5', 'm15']) if (num(r[k]) !== null && num(r.entry) !== null) { w[k] = (w[k] || 0) + (r[k] - r.entry) * 100; w[k + 'n'] = (w[k + 'n'] || 0) + 1; }
+    if (num(c.usd) !== null && c.usd > 0) { w.s1 = (w.s1 || 0) + c.usd; w.s2 = (w.s2 || 0) + c.usd * c.usd; }
+    if (c.mm) w.maker = c.mm;
+  }
+  return Object.values(by).map((w) => { const base = cat[w.cat].sum / cat[w.cat].n; return { whale: w.whale, cat: w.cat, n: w.n, avg: r1(w.sum / w.n), grade: r1((w.sum + K * base) / (w.n + K)),
+    m5: w.m5n ? r1(w.m5 / w.m5n) : null, m15: w.m15n ? r1(w.m15 / w.m15n) : null, effN: w.s2 ? r1(w.s1 * w.s1 / w.s2) : null, maker: w.maker || null }; })
     .sort((x, y) => y.grade - x.grade);
+}
+
+// Does the market-maker label earn its keep? The same one-hour test, split by whether the wallet was flagged when it bought.
+export function whaleSplit(rows) {
+  const out = {};
+  for (const r of rows) {
+    if (r.setup !== 'whale_add' || r.status === 'open' || r.status === 'void' || num(r.net) === null) continue;
+    let c = {}; try { c = r.ctx ? (typeof r.ctx === 'string' ? JSON.parse(r.ctx) : r.ctx) : {}; } catch (e) { c = {}; }
+    const k = c.mm === undefined ? 'before the label existed' : c.mm ? 'flagged: ' + c.mm : 'not flagged'; const o = out[k] = out[k] || { n: 0, net: 0, m15: 0, m15n: 0 };
+    o.n++; o.net += r.net; if (num(r.m15) !== null && num(r.entry) !== null) { o.m15 += (r.m15 - r.entry) * 100; o.m15n++; }
+  }
+  return Object.keys(out).map((k) => ({ group: k, n: out[k].n, avg: Math.round(out[k].net / out[k].n * 10) / 10, m15: out[k].m15n ? Math.round(out[k].m15 / out[k].m15n * 10) / 10 : null }));
 }

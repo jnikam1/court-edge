@@ -112,6 +112,42 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
     assert.strictEqual(both.length, 1, 'two buys, one card'); assert.strictEqual(both[0].outcome, 'Bilibili Gaming'); assert.strictEqual(both[0].added, 90000); assert.strictEqual(both[0].lean, 'hedged'); assert.strictEqual(both[0].quiet, false); assert.strictEqual(both[0].net.both, true); assert.strictEqual(both[0].id, '0xw|' + ev);
     const trim = group(w, [A({ outcome: 'Gen.G', added: 85000, paid: 0.76, last: 100 })], book); assert.strictEqual(trim[0].outcome, 'Bilibili Gaming'); assert.strictEqual(trim[0].quiet, true, 'buying only the smaller side is a trim, and is not pushed');
     const sideM = group(w, [A({ main: false, outcome: 'Gen.G', added: 78000, paid: 0.56, last: 50, id: 'x' })], book); assert.strictEqual(sideM[0].grouped, undefined); assert.strictEqual(sideM[0].series.lead, 'Bilibili Gaming');
+    assert.deepStrictEqual(both[0].net.also, [], 'a finished single game is not listed beside the match');
+    const more = book.concat([O({ event_slug: ev, slug: ev + '-spread', title: 'Gen.G -1.5 games', outcome: 'No', current_size: 100000, current_price: 0.6 }), O({ event_slug: ev, slug: ev + '-tiny', title: 'Total kills', outcome: 'Over', current_size: 500, current_price: 0.5 })]);
+    const withAlso = group(w, [A({ outcome: 'Bilibili Gaming', added: 90000, paid: 0.37, last: 200 })], more)[0].net.also;
+    assert.deepStrictEqual(withAlso, [{ title: 'Gen.G -1.5 games', outcome: 'No', usd: 50000 }], 'a live spread on the same match is listed with what it cost, small change is not');
+  });
+
+  await check('whale alerts: a wallet that looks like a market maker, or loses over its life, is labelled, and others are left alone', async () => {
+    const { makerRead, withRef } = require('../lib/alerts'); const T = (cond, idx, usd, side) => ({ condition_id: cond, outcome_index: idx, usdc_size: usd, side: side || 'BUY' });
+    const sharp = makerRead({ pnl: 9.8e6, volume: 411e6 }, [T('a', 0, 50000)], { merges: 0, fills: 1 }); assert.strictEqual(sharp.is, false, '2.4% on volume, one side, no merges: not flagged'); assert.strictEqual(sharp.kind, null);
+    const thin = makerRead({ pnl: 5.5e6, volume: 1402e6 }, [], {}); assert.strictEqual(thin.is, true); assert.strictEqual(thin.kind, 'thin', 'a thin margin alone is called thin, not a market maker'); assert.ok(/0\.4% of the \$1\.4B/.test(thin.why[0]), thin.why[0]);
+    const loser = makerRead({ pnl: -4.75e6, volume: 266e6 }, [], {}); assert.strictEqual(loser.kind, 'losing'); assert.strictEqual(makerRead({ pnl: -4.75e6, volume: 266e6 }, [], { merges: 2 }).kind, 'maker', 'seen merging outranks the lifetime figure'); assert.ok(/down \$4\.8M over its life on \$266M/.test(loser.why[0]), loser.why[0]);
+    assert.strictEqual(makerRead({ pnl: 66000, volume: 15000 }, [], {}).is, false, 'a small wallet is not judged on its ratio');
+    assert.strictEqual(makerRead({ pnl: 9e6, volume: 100e6 }, [], { merges: 3 }).kind, 'maker', 'merging pairs back into cash is what a market maker does');
+    const two = [T('a', 0, 20000), T('a', 1, 18000), T('b', 0, 9000), T('b', 1, 9000)];
+    assert.strictEqual(makerRead({ pnl: 9e6, volume: 100e6 }, two, {}).both, 2); assert.strictEqual(makerRead({ pnl: 9e6, volume: 100e6 }, two, {}).is, true, 'both sides of two markets in the window');
+    assert.strictEqual(makerRead({ pnl: 9e6, volume: 100e6 }, two.slice(0, 2), {}).is, false, 'both sides of one market can be a hedge, so it takes two');
+    assert.strictEqual(makerRead({ pnl: 9e6, volume: 100e6 }, [T('a', 0, 20000), T('a', 1, 18000, 'SELL'), T('b', 0, 9000), T('b', 1, 100)], {}).is, false, 'sales and dust do not count as buying both sides');
+    // the reference price lands on the right team whichever way round the venues list them
+    const S = require('../lib/sports'); const real = S.refBySlug;
+    S.refBySlug = async (slug) => (slug === 'nfl-min-gb-2026-11-15' ? { event: 'E', state: 'upcoming', book: 'DraftKings', a: { name: 'Vikings', full: 'Minnesota Vikings', fair: 0.41, bid: 0.4, ask: 0.42 }, b: { name: 'Packers', full: 'Green Bay Packers', fair: 0.59, bid: 0.58, ask: 0.6 } } : null);
+    try {
+      const d = await withRef({ alerts: [{ grouped: true, slug: 'nfl-min-gb-2026-11-15', outcome: 'Packers' }, { grouped: true, slug: 'nfl-min-gb-2026-11-15', outcome: 'Minnesota' }, { grouped: true, slug: 'lol-blg-gen-2026-11-14', outcome: 'Gen.G' }, { sell: true, slug: 'nfl-min-gb-2026-11-15', outcome: 'Packers' }] });
+      assert.deepStrictEqual(d.alerts[0].ref, { event: 'E', state: 'upcoming', book: 'DraftKings', fair: 0.59, kalshi: 0.6, kalshiBid: 0.58 }); assert.strictEqual(d.alerts[1].ref.fair, 0.41, 'a city name finds its team');
+      assert.strictEqual(d.alerts[2].ref, undefined, 'no reference outside the NBA and NFL'); assert.strictEqual(d.alerts[3].ref, undefined, 'none on a sale');
+    } finally { S.refBySlug = real; }
+  });
+
+  await check('engine: wallet grades carry markouts and a size-weighted count, and the market-maker label is scored on its own', async () => {
+    const { whaleGrades, whaleSplit } = await import(path.join(root, 'worker/src/brain.js'));
+    const R = (name, net, entry, m15, usd, mm) => ({ setup: 'whale_add', status: 'deadline', lg: 'NFL', name, net, entry, m5: entry, m15, ctx: JSON.stringify(mm === undefined ? { usd } : { usd, mm }) });
+    const rows = [R('A', 2, 0.5, 0.53, 2000000, false), R('A', -1, 0.5, 0.49, 20000, false), R('A', -1, 0.5, 0.49, 20000, false), R('B', -3, 0.6, 0.58, 50000, 'maker'), R('B', -1, 0.6, 0.6, 50000, 'maker'), R('C', 1, 0.4, 0.41, 10000)];
+    const g = whaleGrades(rows); const a = g.find((x) => x.whale === 'A'); const b = g.find((x) => x.whale === 'B');
+    assert.strictEqual(a.n, 3); assert.strictEqual(a.m15, 0.3, 'average move after 15 minutes, in cents'); assert.strictEqual(a.m5, 0); assert.strictEqual(a.effN, 1, 'one $2M bet and two of $20k count as about one bet');
+    assert.strictEqual(b.effN, 2); assert.strictEqual(b.maker, 'maker'); assert.strictEqual(b.m15, -1);
+    const sp = whaleSplit(rows); const by = {}; for (const x of sp) by[x.group] = x;
+    assert.strictEqual(by['not flagged'].n, 3); assert.strictEqual(by['not flagged'].avg, 0); assert.strictEqual(by['flagged: maker'].avg, -2); assert.strictEqual(by['before the label existed'].n, 1);
   });
 
   // alerts and tracked positions in the page
@@ -315,6 +351,12 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       assert.strictEqual(sentNotes(), 1, 'ten top-ups of $2k each: nothing more is sent'); assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM signals WHERE setup = 'whale_add'").get().n, 1, 'and they are one tracked add, not eleven');
       await run([A(175000, 200)]); assert.strictEqual(sentNotes(), 2, 'up by more than a quarter and $25k: announced again');
       await run([A(180000, 201)]); assert.strictEqual(sentNotes(), 2);
+      // a wallet flagged as a market maker: recorded and tracked, with the label saved, but the phone stays quiet, for buys and for sales
+      const mm = { is: true, kind: 'maker', why: ['x'] };
+      await run([Object.assign(A(300000, 300), { id: '0xmm|nfl-kc-den', whale: 'RN1', w: '0xmm', maker: mm })]); assert.strictEqual(sentNotes(), 2, 'a market maker buying is not sent');
+      const tracked = db.prepare("SELECT ctx FROM signals WHERE setup = 'whale_add' AND name = 'RN1'").get(); assert.ok(tracked, 'it is still tracked'); assert.strictEqual(JSON.parse(tracked.ctx).mm, 'maker'); assert.strictEqual(JSON.parse(tracked.ctx).usd, 300000);
+      await run([{ id: 'sell|0xmm|c|0', sell: true, kind: 'exit', whale: 'RN1', w: '0xmm', cat: 'NFL', title: 'Chiefs vs. Broncos', outcome: 'Chiefs', sold: 90000, price: 0.6, left: 0, last: 400, added: 0, maker: mm }]); assert.strictEqual(sentNotes(), 2, 'nor is a market maker selling');
+      await run([{ id: 'sell|0xbtb|c|0', sell: true, kind: 'exit', whale: 'BreakTheBank', w: '0xbtb', cat: 'NFL', title: 'Chiefs vs. Broncos', outcome: 'Chiefs', sold: 90000, price: 0.6, left: 0, last: 401, added: 0, maker: { is: false, why: [] } }]); assert.strictEqual(sentNotes(), 3, 'a sale by a wallet that is not flagged still is');
     } finally { global.fetch = realFetch; Date.now = realNow; }
   });
 

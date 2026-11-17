@@ -1,4 +1,4 @@
-import { SETUPS, gameSignals, tennisSignals, fightSignals, flowSignals, favStats, manage, netCents, summarize, whaleGrades, cents } from './brain.js';
+import { SETUPS, gameSignals, tennisSignals, fightSignals, flowSignals, favStats, manage, netCents, summarize, whaleGrades, whaleSplit, cents } from './brain.js';
 // Court Edge logger (Cloudflare Worker).
 // Every minute: read the app's own endpoints, store a price and score snapshot for each tennis match
 // in play and each NBA or NFL game near its start, record new big whale adds and injury report
@@ -150,7 +150,7 @@ async function runBrain(env, now, scan, sp, al, newAdds, news, notes) {
       why: n.i.name + ' (' + n.i.teamName + ') ' + (n.fade ? 'is ' + n.i.tag.toLowerCase() : 'is cleared') + '. Tracks where the price is 5, 15 and 20 minutes later.' });
   }
   // wallet analyst: every big add, followed for an hour at the price we saw it
-  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97 && a.lean !== 'against' && !a.quiet) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, ctx: { cond: a.cond, outcome: a.outcome }, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
+  for (const a of newAdds) if (a.cur > 0.03 && a.cur < 0.97 && a.lean !== 'against' && !a.quiet) found.push({ id: 'whale_add|' + a.id + '|' + a.last, setup: 'whale_add', lg: a.cat, event: a.id, side: String(a.outcome || ''), name: a.whale, ticker: null, title: a.title, url: '/#alerts', entry: a.cur, target: null, deadline: now + 3600, model: null, t: now, ctx: { cond: a.cond, outcome: a.outcome, usd: a.added, mm: a.maker ? (a.maker.is ? a.maker.kind || 'maker' : false) : undefined }, why: a.whale + ' added ' + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + ' at ' + cents(a.paid) + '. Tracks the price for the next hour.' });
   // open the new ones
   let opened = 0;
   if (found.length) {
@@ -261,13 +261,14 @@ async function tick(env) {
       }
       if (a.sell) { // a strong wallet getting out: sent to the phone, never tracked as an add
         stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t, amt) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t, amt = excluded.amt').bind(a.id, a.last, now, size));
-        if (!first) notes.push({ id: 'ws-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.kind === 'switch' ? ' switched from ' + a.outcome + ' to ' + a.to : a.kind === 'exit' ? ' sold out of ' + a.outcome : ' sold ' + kUsd(a.sold) + ' of ' + a.outcome), body: a.title + ' (' + a.cat + '). Sold ' + kUsd(a.sold) + (a.price ? ' at ' + cents(a.price) : '') + (a.kind === 'switch' ? ', bought ' + kUsd(a.bought) + ' of ' + a.to : a.left ? ', still holds ' + kUsd(a.left) : ', nothing left') + '.' });
+        if (!first && !(a.maker && a.maker.is)) notes.push({ id: 'ws-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.kind === 'switch' ? ' switched from ' + a.outcome + ' to ' + a.to : a.kind === 'exit' ? ' sold out of ' + a.outcome : ' sold ' + kUsd(a.sold) + ' of ' + a.outcome), body: a.title + ' (' + a.cat + '). Sold ' + kUsd(a.sold) + (a.price ? ' at ' + cents(a.price) : '') + (a.kind === 'switch' ? ', bought ' + kUsd(a.bought) + ' of ' + a.to : a.left ? ', still holds ' + kUsd(a.left) : ', nothing left') + '.' });
         continue;
       }
       fresh++; newAdds.push(a);
       stmts.push(env.DB.prepare('INSERT INTO sent (id, last, t, amt) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET last = excluded.last, t = excluded.t, amt = excluded.amt').bind(a.id, a.last, now, size));
       stmts.push(env.DB.prepare('INSERT INTO alerts (t, id, whale, cat, title, outcome, added, paid, stake, cur, last) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(now, a.id, a.whale, a.cat, a.title, a.outcome, a.added, a.paid, a.stake, a.cur, a.last));
       if (a.lean === 'against' || a.quiet) continue; // a hedge or a trim: logged, but not sent as a bet
+      if (a.maker && a.maker.is) continue; // a market maker's fill, or a wallet that loses over its life: shown in the app with a label, never sent to the phone
       if (a.grouped) { notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + ' added ' + kUsd(a.added) + ' on ' + a.outcome + (a.lean === 'hedged' ? ' (works both sides)' : ''), body: a.title + ' (' + a.cat + '). Whole position: paid ' + kUsd(a.net.for) + ' if ' + a.outcome + ' win, ' + kUsd(a.net.against) + ' if ' + a.other + ' win.' }); continue; }
       notes.push({ id: 'w-' + a.id + '-' + a.last, t: now, kind: 'whale', url: '/#alerts', title: a.whale + (a.fresh ? ' opened ' : ' added ') + kUsd(a.added) + ' on ' + (a.outcome || 'one side') + (a.lean === 'hedged' ? ' (partly hedged)' : ''), body: a.title + ' (' + a.cat + '). Bought at ' + Math.round(a.paid * 100) + '¢, stake now ' + kUsd(a.stake) + '.' });
     }
@@ -410,9 +411,8 @@ export default {
           // The money tests split by when they fired (before the start, or which period), with the average price paid, so a win rate can be read against its price.
           const ph = {}; for (const r of rows) { if (!/_flow/.test(r.setup) || r.status === 'open' || r.status === 'void' || r.net === null) continue; let c = null; try { c = r.ctx ? JSON.parse(r.ctx) : null; } catch (e) { c = null; } const k = r.setup + '|' + (c && c.phase === 'pre' ? 'before start' : 'in play'); const o = ph[k] = ph[k] || { n: 0, won: 0, net: 0, entry: 0, events: {} }; o.n++; o.net += r.net; o.entry += r.entry; if (r.exit === 1) o.won++; o.events[r.event] = 1; }
           const phases = Object.keys(ph).sort().map((k) => ({ test: k, n: ph[k].n, games: Object.keys(ph[k].events).length, won: ph[k].won, avg: Math.round(ph[k].net / ph[k].n * 10) / 10, avgEntry: Math.round(ph[k].entry / ph[k].n * 100) / 100 }));
-          return json({ now: nowS, ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), phases, open: openBy, ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
+          return json({ now: nowS, ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), phases, open: openBy, ufc: favStats(rows), whales: whaleGrades(rows), whaleSplit: whaleSplit(rows) });
         }
-        if (false) return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), ufc: favStats(rows), whales: whaleGrades(rows).slice(0, 8) });
         return json({ now: Math.floor(Date.now() / 1000), ran: ln ? ln.t : null, error: ln ? ln.brainError || null : null, summary: summarize(rows), whales: whaleGrades(rows).slice(0, 20), ufc: favStats(rows), signals: rows.filter((r) => !QUIET[r.setup]).slice(0, 40), tracked: rows.filter((r) => QUIET[r.setup]).slice(0, 40) });
       }
       if (url.pathname === '/injuries') { const r = await env.DB.prepare('SELECT * FROM injlog ORDER BY t DESC LIMIT 200').all(); return json({ changes: r.results || [] }); }
