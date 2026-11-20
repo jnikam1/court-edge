@@ -323,6 +323,8 @@ async function tick(env) {
     const old = JSON.parse((await kvGet(env, 'notes')) || '[]');
     await kvSet(env, 'notes', JSON.stringify(notes.concat(old).slice(0, 12)));
     note.push = await pushAll(env); note.told = notes.length;
+    // Keep the last 40 sends, so "did my phone get told, and did the push service accept it" can be answered afterwards.
+    try { const log = JSON.parse((await kvGet(env, 'pushlog')) || '[]'); log.unshift({ t: now, told: notes.length, titles: notes.slice(0, 3).map((n) => String(n.title || '').slice(0, 90)), phones: note.push.phones, delivered: note.push.delivered, statuses: note.push.statuses }); await kvSet(env, 'pushlog', JSON.stringify(log.slice(0, 40))); } catch (e) { /* a log, never a reason to fail the run */ }
   }
   // 5) each phone's own price alerts
   try { note.rules = await checkRules(env, now); } catch (e) { note.rulesError = String(e && e.message); }
@@ -419,6 +421,11 @@ export default {
       if (url.pathname === '/games') { // price and score history for one NBA or NFL game
         const ev = url.searchParams.get('event'); if (!ev) return json({ error: 'event required' }, 400);
         const r = await env.DB.prepare('SELECT * FROM gsnaps WHERE event = ? ORDER BY t LIMIT 3000').bind(ev).all(); return json({ snaps: r.results || [] });
+      }
+      if (url.pathname === '/pushlog') { // what was sent and whether the push service took it. No phone addresses, only the service's host name.
+        const nowS = Math.floor(Date.now() / 1000); const subs = ((await env.DB.prepare('SELECT endpoint, created, fails, tested FROM subs').all()).results || []).map((s) => { let host = '?'; try { host = new URL(s.endpoint).host; } catch (e) { /* keep ? */ } return { host, created: s.created, fails: s.fails, tested: s.tested }; });
+        const sent = (await env.DB.prepare('SELECT id, last, t, amt FROM sent ORDER BY t DESC LIMIT 12').all()).results || [];
+        return json({ now: nowS, subs, notes: JSON.parse((await kvGet(env, 'notes')) || '[]').map((n) => ({ t: n.t, minAgo: Math.round((nowS - n.t) / 60), kind: n.kind, title: n.title })), log: JSON.parse((await kvGet(env, 'pushlog')) || '[]'), sent: sent.map((r) => ({ id: String(r.id).replace(/0x([0-9a-f]{4})[0-9a-f]+/g, '0x$1…'), minAgo: Math.round((nowS - r.t) / 60), amt: r.amt })) });
       }
       if (url.pathname === '/alerts') { const r = await env.DB.prepare('SELECT * FROM alerts ORDER BY t DESC LIMIT 100').all(); return json({ alerts: r.results || [] }); }
       if (url.pathname === '/snaps') { // price history for one match

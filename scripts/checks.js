@@ -351,6 +351,7 @@ const near = (x, y, tol) => Math.abs(x - y) <= (tol || 1e-9);
       assert.strictEqual(sentNotes(), 1, 'ten top-ups of $2k each: nothing more is sent'); assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM signals WHERE setup = 'whale_add'").get().n, 1, 'and they are one tracked add, not eleven');
       await run([A(175000, 200)]); assert.strictEqual(sentNotes(), 2, 'up by more than a quarter and $25k: announced again');
       await run([A(180000, 201)]); assert.strictEqual(sentNotes(), 2);
+      const plog = JSON.parse(db.prepare("SELECT v FROM kv WHERE k = 'pushlog'").get().v); assert.strictEqual(plog.length, 2, 'each send is logged'); assert.strictEqual(plog[0].told, 1); assert.ok(/BreakTheBank/.test(plog[0].titles[0])); assert.strictEqual(plog[0].phones, 0);
       // a wallet flagged as a market maker: recorded and tracked, with the label saved, but the phone stays quiet, for buys and for sales
       const mm = { is: true, kind: 'maker', why: ['x'] };
       await run([Object.assign(A(300000, 300), { id: '0xmm|nfl-kc-den', whale: 'RN1', w: '0xmm', maker: mm })]); assert.strictEqual(sentNotes(), 2, 'a market maker buying is not sent');
